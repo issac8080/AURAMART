@@ -63,7 +63,7 @@ export default function SearchPage() {
       <div className="flex items-center gap-3">
         <Search className="h-6 w-6 text-muted-foreground" />
         <div>
-          <h1 className="text-2xl font-bold">Search Results</h1>
+          <h1 className="font-heading text-fluid-2xl sm:text-fluid-3xl font-bold tracking-tight">Search Results</h1>
           {query && (
             <p className="text-muted-foreground">
               {loading ? "Searching..." : `${products.length} results for "${query}"`}

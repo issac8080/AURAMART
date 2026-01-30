@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "clean": "node -e \"try { require('fs').rmSync('.next', { recursive: true, force: true }); console.log('Cleaned .next'); } catch (e) { console.log('Clean skipped:', e.message); }\""
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.0.4",

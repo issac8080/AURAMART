@@ -4,32 +4,42 @@
 
 @layer base {
   :root {
-    --background: 240 10% 98%;
-    --foreground: 240 10% 10%;
-    --primary: 262 83% 58%;
+    --background: 240 20% 99%;
+    --foreground: 224 30% 12%;
+    --primary: 243 75% 59%;
     --primary-foreground: 0 0% 100%;
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 4% 46%;
-    --accent: 262 70% 96%;
-    --accent-foreground: 262 83% 40%;
+    --muted: 240 15% 96%;
+    --muted-foreground: 240 5% 45%;
+    --accent: 243 60% 95%;
+    --accent-foreground: 243 75% 40%;
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 10%;
-    --border: 240 6% 90%;
-    --ring: 262 83% 58%;
+    --card-foreground: 224 30% 12%;
+    --border: 240 12% 90%;
+    --ring: 243 75% 59%;
+    --radius: 0.75rem;
+    --radius-lg: 1rem;
+    --radius-xl: 1.25rem;
+    --radius-2xl: 1.5rem;
+    --radius-3xl: 1.75rem;
+    /* AI accent: neon cyan/green for highlights */
+    --ai-accent: 173 80% 40%;
+    --ai-glow: 243 75% 59%;
   }
   .dark {
-    --background: 240 10% 6%;
-    --foreground: 240 5% 96%;
-    --primary: 262 83% 65%;
+    --background: 224 30% 6%;
+    --foreground: 240 10% 96%;
+    --primary: 243 75% 65%;
     --primary-foreground: 0 0% 100%;
-    --muted: 240 4% 12%;
+    --muted: 224 20% 12%;
     --muted-foreground: 240 5% 60%;
-    --accent: 262 50% 15%;
-    --accent-foreground: 262 83% 80%;
-    --card: 240 8% 10%;
-    --card-foreground: 240 5% 96%;
-    --border: 240 4% 16%;
-    --ring: 262 83% 65%;
+    --accent: 243 40% 16%;
+    --accent-foreground: 243 75% 78%;
+    --card: 224 25% 9%;
+    --card-foreground: 240 10% 96%;
+    --border: 224 15% 18%;
+    --ring: 243 75% 65%;
+    --ai-accent: 173 70% 50%;
+    --ai-glow: 243 75% 55%;
   }
 }
 
@@ -37,20 +47,32 @@
   border-color: hsl(var(--border));
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));
-  background-image: 
-    radial-gradient(at 0% 0%, hsla(262, 83%, 58%, 0.05) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, hsla(262, 83%, 58%, 0.05) 0px, transparent 50%);
+  font-feature-settings: "rlig" 1, "calt" 1;
+  background-image:
+    radial-gradient(ellipse 140% 100% at 0% 0%, hsla(243, 75%, 59%, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse 100% 80% at 100% 0%, hsla(199, 89%, 48%, 0.06) 0%, transparent 45%),
+    radial-gradient(ellipse 80% 60% at 100% 100%, hsla(262, 83%, 58%, 0.05) 0%, transparent 50%);
 }
 
-/* Smooth scroll and reduced motion respect */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading), system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+  html { scroll-behavior: auto; }
 }
 
 .scrollbar-hide {
@@ -59,4 +81,55 @@ body {
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+/* ========== GLASSMORPHISM ========== */
+@layer components {
+  .glass {
+    @apply bg-white/70 dark:bg-white/5 backdrop-blur-xl border border-white/20 dark:border-white/10;
+  }
+  .glass-card {
+    @apply bg-white/80 dark:bg-white/[0.07] backdrop-blur-2xl border border-white/30 dark:border-white/10 shadow-xl shadow-black/5 dark:shadow-none;
+  }
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300 hover:shadow-2xl hover:shadow-primary/10 hover:scale-[1.02] hover:border-primary/20;
+  }
+  /* AI glow for cards / assistant */
+  .glow-ai {
+    box-shadow:
+      0 0 0 1px hsl(var(--primary) / 0.15),
+      0 0 24px -4px hsl(var(--primary) / 0.25),
+      0 0 48px -8px hsl(var(--ai-accent) / 0.15);
+  }
+  .glow-ai-strong {
+    box-shadow:
+      0 0 0 1px hsl(var(--primary) / 0.3),
+      0 0 32px -4px hsl(var(--primary) / 0.4),
+      0 0 64px -12px hsl(var(--ai-accent) / 0.25);
+  }
+  /* Gradient text */
+  .text-gradient-ai {
+    @apply bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 bg-clip-text text-transparent;
+  }
+  /* Gradient pill (AI badges) */
+  .pill-ai-best {
+    @apply bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-0 shadow-md shadow-indigo-500/30;
+  }
+  .pill-ai-value {
+    @apply bg-gradient-to-r from-emerald-500 to-cyan-500 text-white border-0 shadow-md shadow-emerald-500/25;
+  }
+  .pill-ai-trending {
+    @apply bg-gradient-to-r from-amber-500 to-orange-500 text-white border-0 shadow-md shadow-amber-500/25;
+  }
+}
+
+/* Animated gradient background (hero) */
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient-shift 8s ease infinite;
 }
