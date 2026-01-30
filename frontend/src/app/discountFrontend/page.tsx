@@ -13,6 +13,7 @@ import {
   CreditCard,
   ShoppingCart,
   ArrowLeft,
+  User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -21,6 +22,7 @@ import {
   fetchPriceDropNotifications,
   fetchSubscriptionTiers,
   fetchFestivals,
+  fetchDemoUsers,
 } from "@/discountFrontend/api";
 import { DiscountCard as DiscountCardComponent } from "@/discountFrontend/DiscountCard";
 import { PriceDropAlerts } from "@/discountFrontend/PriceDropAlerts";
@@ -45,14 +47,24 @@ export default function DiscountFrontendPage() {
   const [festivals, setFestivals] = useState<Festival[]>([]);
   const [orderTotal, setOrderTotal] = useState(1000);
   const [loading, setLoading] = useState(true);
+  const [demoUsers, setDemoUsers] = useState<{ id: string; name: string; role: string; description?: string }[]>([]);
+  const [viewAsUserId, setViewAsUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!sessionId) {
+    fetchDemoUsers()
+      .then((data) => setDemoUsers(data.users || []))
+      .catch(() => setDemoUsers([]));
+  }, []);
+
+  const effectiveUserId = viewAsUserId || sessionId || "";
+  const effectiveSessionId = viewAsUserId || sessionId || "";
+
+  useEffect(() => {
+    if (!effectiveUserId) {
       setLoading(false);
       return;
     }
-    const userId = sessionId;
-    fetchApplicableDiscounts(userId, sessionId, orderTotal, [])
+    fetchApplicableDiscounts(effectiveUserId, effectiveSessionId, orderTotal, [])
       .then((data) => setDiscounts(data.discounts || []))
       .catch(() => setDiscounts([]))
       .finally(() => setLoading(false));
@@ -60,7 +72,7 @@ export default function DiscountFrontendPage() {
     fetchFestivals()
       .then((data) => setFestivals(data.festivals || []))
       .catch(() => setFestivals([]));
-  }, [sessionId, orderTotal]);
+  }, [effectiveUserId, effectiveSessionId, orderTotal]);
 
   return (
     <div className="py-8 space-y-8">
@@ -81,6 +93,42 @@ export default function DiscountFrontendPage() {
         </div>
       </div>
 
+      {demoUsers.length > 0 && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="p-4">
+            <p className="text-sm font-medium mb-2 flex items-center gap-2">
+              <User className="h-4 w-4 text-primary" />
+              View discounts as (demo)
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={viewAsUserId === null ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewAsUserId(null)}
+              >
+                My account
+              </Button>
+              {demoUsers.map((u) => (
+                <Button
+                  key={u.id}
+                  variant={viewAsUserId === u.id ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setViewAsUserId(u.id)}
+                  title={u.description}
+                >
+                  {u.name}
+                </Button>
+              ))}
+            </div>
+            {viewAsUserId && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Showing discounts for <strong>{demoUsers.find((u) => u.id === viewAsUserId)?.name ?? viewAsUserId}</strong>
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <FestivalBanner />
 
       <section>
@@ -88,7 +136,10 @@ export default function DiscountFrontendPage() {
           <TrendingDown className="h-5 w-5 text-teal-500" />
           Price drop on items you viewed
         </h2>
-        <PriceDropAlerts />
+        <PriceDropAlerts
+          sessionIdOverride={viewAsUserId}
+          userIdOverride={viewAsUserId}
+        />
       </section>
 
       <section>

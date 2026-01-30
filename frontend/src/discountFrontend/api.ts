@@ -83,3 +83,16 @@ export async function simulatePriceDrop(
   });
   if (!res.ok) throw new Error("Failed to simulate price drop");
 }
+
+export type DemoUser = {
+  id: string;
+  name: string;
+  role: string;
+  description?: string;
+};
+
+export async function fetchDemoUsers(): Promise<{ users: DemoUser[] }> {
+  const res = await fetch(`${API}/discounts/demo-users`);
+  if (!res.ok) return { users: [] };
+  return res.json();
+}

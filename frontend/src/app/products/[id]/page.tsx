@@ -12,6 +12,7 @@ import { useCart } from "@/app/providers";
 import { fetchProduct, fetchRecommendations, trackEvent } from "@/lib/api";
 import { recordProductView } from "@/discountFrontend/api";
 import { formatPrice } from "@/lib/utils";
+import { getProductImageUrl } from "@/lib/unsplash";
 import type { Product } from "@/lib/api";
 
 export default function ProductDetailPage() {
@@ -120,20 +121,20 @@ export default function ProductDetailPage() {
         animate={{ opacity: 1, y: 0 }}
         className="grid md:grid-cols-2 gap-8"
       >
-        <div className="aspect-square rounded-xl bg-muted overflow-hidden">
-          <div
-            className="w-full h-full bg-gradient-to-br from-primary/10 to-accent/20"
-            style={{
-              backgroundImage: product.image_url ? `url(${product.image_url})` : undefined,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
+        <div className="aspect-square rounded-xl bg-muted overflow-hidden relative">
+          <img
+            src={getProductImageUrl(product.image_url, product.category, product.id)}
+            alt={product.name}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              const target = e.currentTarget;
+              if (!target.dataset.fallback) {
+                target.dataset.fallback = "1";
+                target.src = `https://picsum.photos/seed/${product.id.replace(/\W/g, "")}/400/400`;
+              }
             }}
           />
-          {!product.image_url && (
-            <div className="w-full h-full flex items-center justify-center font-heading text-fluid-4xl sm:text-fluid-5xl font-bold text-muted-foreground/30">
-              {product.name.slice(0, 1)}
-            </div>
-          )}
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-accent/20 pointer-events-none" aria-hidden />
         </div>
 
         <div className="space-y-4">

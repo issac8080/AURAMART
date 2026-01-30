@@ -10,6 +10,7 @@ import { ProductCard } from "@/components/ProductCard";
 import { useCart } from "@/app/providers";
 import { getCart, fetchRecommendations, trackEvent } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
+import { getProductImageUrl } from "@/lib/unsplash";
 import type { Product } from "@/lib/api";
 
 export default function CartPage() {
@@ -114,12 +115,20 @@ export default function CartPage() {
                   animate={{ opacity: 1, x: 0 }}
                   className="flex gap-3 sm:gap-4 rounded-2xl border border-border/80 p-3 sm:p-4 bg-card shadow-card hover:shadow-card-hover transition-shadow"
                 >
-                  <div
-                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl bg-muted flex-shrink-0 bg-cover bg-center"
-                    style={{
-                      backgroundImage: item.image_url ? `url(${item.image_url})` : undefined,
-                    }}
-                  />
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl bg-muted flex-shrink-0 overflow-hidden">
+                    <img
+                      src={getProductImageUrl(item.image_url, item.category, item.id)}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const t = e.currentTarget;
+                        if (!t.dataset.fallback) {
+                          t.dataset.fallback = "1";
+                          t.src = `https://picsum.photos/seed/${item.id.replace(/\W/g, "")}/200/200`;
+                        }
+                      }}
+                    />
+                  </div>
                   <div className="flex-1 min-w-0">
                     <Link href={`/products/${item.id}`} className="font-medium text-fluid-sm hover:text-primary line-clamp-1">
                       {item.name}

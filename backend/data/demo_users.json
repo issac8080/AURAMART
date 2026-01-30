@@ -1,0 +1,22 @@
+{
+  "users": [
+    {
+      "id": "Sujal",
+      "name": "Sujal",
+      "role": "full_demo",
+      "description": "Demo account with every discount: Super Loyal (10%), Subscription (Starter), Price Drop alerts, Vendor & Festival when applicable."
+    },
+    {
+      "id": "user_new",
+      "name": "New Customer",
+      "role": "new_user",
+      "description": "0 orders — gets New User 10% off on first order."
+    },
+    {
+      "id": "user_loyal",
+      "name": "Loyal Customer",
+      "role": "loyal",
+      "description": "3+ completed orders — gets Loyal Customer 5% off."
+    }
+  ]
+}

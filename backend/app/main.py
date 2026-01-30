@@ -439,6 +439,21 @@ def simulate_price_drop_endpoint(product_id: str = Query(...), new_price: float 
     return {"ok": True, "product_id": product_id, "new_price": new_price}
 
 
+@app.get("/discounts/demo-users")
+def get_demo_users_endpoint():
+    """Get demo user accounts for discount feature demonstration (e.g. Sujal = all discounts)."""
+    import json
+    from pathlib import Path
+    path = Path(__file__).resolve().parent.parent / "data" / "demo_users.json"
+    if not path.exists():
+        return {"users": []}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {"users": []}
+
+
 @app.post("/wallet/add-money")
 def add_money_endpoint(user_id: str = Query(...), amount: float = Query(...), payment_method: str = Query("razorpay")):
     """Add money to wallet (top-up). Payment gateway integration placeholder."""

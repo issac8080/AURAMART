@@ -1,0 +1,26 @@
+{
+  "subscriptions": {
+    "Sujal": "starter"
+  },
+  "vendor_discounts": {
+    "Alisha": 10.0,
+    "AW": 5.0,
+    "FabHomeDecor": 15.0
+  },
+  "festivals": [
+    {
+      "id": "republic_day",
+      "label": "Republic Day Sale",
+      "percent": 15.0,
+      "start": "2026-01-28T00:00:00",
+      "end": "2026-02-05T23:59:59"
+    },
+    {
+      "id": "diwali",
+      "label": "Diwali Special",
+      "percent": 20.0,
+      "start": "2026-10-28T00:00:00",
+      "end": "2026-11-05T23:59:59"
+    }
+  ]
+}

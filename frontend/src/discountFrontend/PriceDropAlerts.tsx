@@ -9,21 +9,27 @@ import type { PriceDropNotification } from "./types";
 import { TrendingDown, ExternalLink } from "lucide-react";
 import { useCart } from "@/app/providers";
 
-export function PriceDropAlerts() {
+type PriceDropAlertsProps = {
+  sessionIdOverride?: string | null;
+  userIdOverride?: string | null;
+};
+
+export function PriceDropAlerts({ sessionIdOverride, userIdOverride }: PriceDropAlertsProps = {}) {
   const { sessionId } = useCart();
+  const effectiveSessionId = sessionIdOverride ?? sessionId;
   const [notifications, setNotifications] = useState<PriceDropNotification[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!sessionId) {
+    if (!effectiveSessionId) {
       setLoading(false);
       return;
     }
-    fetchPriceDropNotifications(sessionId)
+    fetchPriceDropNotifications(effectiveSessionId, userIdOverride ?? undefined)
       .then((data) => setNotifications(data.notifications || []))
       .catch(() => setNotifications([]))
       .finally(() => setLoading(false));
-  }, [sessionId]);
+  }, [effectiveSessionId, userIdOverride]);
 
   if (loading || notifications.length === 0) return null;
 

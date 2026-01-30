@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
@@ -8,7 +9,7 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatPrice } from "@/lib/utils";
-import { getProductImage } from "@/lib/unsplash";
+import { getProductImage, getProductImageUrl } from "@/lib/unsplash";
 import type { Product } from "@/lib/api";
 
 type BadgeType = "best_match" | "value" | "trending" | null;
@@ -37,6 +38,18 @@ export function ProductCard({
   };
 
   const badgeConfig = badge ? BADGE_CONFIG[badge] : null;
+  const fallbackSrc = getProductImage(product.category, product.id);
+  const [imgSrc, setImgSrc] = useState(() =>
+    getProductImageUrl(product.image_url, product.category, product.id)
+  );
+  const [imgError, setImgError] = useState(false);
+
+  const handleImageError = () => {
+    if (!imgError) {
+      setImgError(true);
+      setImgSrc(fallbackSrc);
+    }
+  };
 
   return (
     <motion.div
@@ -50,10 +63,12 @@ export function ProductCard({
         <Link href={`/products/${product.id}`} onClick={handleClick} className="block">
           <div className="aspect-square bg-muted/50 relative overflow-hidden">
             <Image
-              src={getProductImage(product.category, product.id)}
+              key={imgSrc}
+              src={imgSrc}
               alt={product.name}
               fill
               unoptimized
+              onError={handleImageError}
               className="object-cover group-hover:scale-110 transition-transform duration-500 ease-out"
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
             />
