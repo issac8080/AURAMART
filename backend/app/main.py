@@ -37,6 +37,29 @@ from app.order_service import (
     create_or_update_profile,
     get_available_stores,
 )
+from app.wallet_service import (
+    get_wallet,
+    get_wallet_summary,
+    add_cashback,
+    deduct_from_wallet,
+    get_recent_transactions,
+    calculate_cashback,
+    get_cashback_rate,
+)
+from app.discountBackend import (
+    get_applicable_discounts,
+    get_new_user_discount,
+    get_price_drop_notifications,
+    record_product_view,
+    record_price,
+    get_subscription_tiers,
+    get_festivals,
+    set_user_subscription,
+    get_subscription_discount,
+    simulate_price_drop,
+    AppliedDiscount,
+    PriceDropNotification,
+)
 
 
 @asynccontextmanager
@@ -333,3 +356,72 @@ def preview_cashback(order_total: float):
         "points_rate": f"{rate:.0f}%",
         "validity_days": 30,
     }
+
+
+# ---------- Discount API (discountBackend) ----------
+
+
+@app.get("/discounts/applicable")
+def get_discounts_applicable(
+    user_id: str = Query(...),
+    session_id: str = Query(...),
+    order_total: float = Query(...),
+    cart_items: str = Query("[]", description="JSON array of {product_id, price, quantity, brand}"),
+):
+    """Get all applicable discounts for a user and cart."""
+    import json
+    try:
+        items = json.loads(cart_items)
+    except Exception:
+        items = []
+    discounts = get_applicable_discounts(user_id, session_id, items, order_total)
+    return {"discounts": [d.model_dump() for d in discounts]}
+
+
+@app.get("/discounts/price-drop-notifications")
+def get_price_drop_notifications_endpoint(
+    session_id: str = Query(...),
+    user_id: str | None = Query(None),
+):
+    """Get price drop notifications for products the user viewed/searched."""
+    notifications = get_price_drop_notifications(session_id, user_id)
+    return {"notifications": [n.model_dump() for n in notifications]}
+
+
+@app.post("/discounts/record-view")
+def record_product_view_endpoint(
+    session_id: str = Query(...),
+    product_id: str = Query(...),
+    user_id: str | None = Query(None),
+):
+    """Record that user viewed a product (for price drop alerts)."""
+    record_product_view(session_id, user_id, product_id)
+    return {"ok": True}
+
+
+@app.get("/discounts/subscription-tiers")
+def get_subscription_tiers_endpoint():
+    """Get available subscription tiers."""
+    return {"tiers": get_subscription_tiers()}
+
+
+@app.get("/discounts/festivals")
+def get_festivals_endpoint():
+    """Get festival discount campaigns."""
+    return {"festivals": get_festivals()}
+
+
+@app.post("/discounts/subscription")
+def set_subscription_endpoint(user_id: str = Query(...), tier_id: str | None = Query(None)):
+    """Set or clear user subscription tier."""
+    set_user_subscription(user_id, tier_id)
+    return {"ok": True, "tier_id": tier_id}
+
+
+@app.post("/discounts/simulate-price-drop")
+def simulate_price_drop_endpoint(product_id: str = Query(...), new_price: float = Query(...)):
+    """(Demo) Simulate a price drop for a product to trigger notifications."""
+    ok = simulate_price_drop(product_id, new_price)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return {"ok": True, "product_id": product_id, "new_price": new_price}

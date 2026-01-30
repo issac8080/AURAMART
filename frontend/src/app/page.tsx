@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Sparkles, TrendingUp, Zap } from "lucide-react";
 import { ProductCarousel } from "@/components/ProductCarousel";
+import { FestivalBanner } from "@/discountFrontend/FestivalBanner";
 import { useCart } from "@/app/providers";
 import { fetchProducts, fetchRecommendations, trackEvent } from "@/lib/api";
 import { getHeroBackground } from "@/lib/unsplash";
@@ -115,6 +116,8 @@ export default function HomePage() {
         </div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
       </motion.section>
+
+      <FestivalBanner />
 
       {loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">

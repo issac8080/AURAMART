@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ShoppingBag, Sparkles, User, Wallet } from "lucide-react";
+import { ShoppingBag, Sparkles, User, Wallet, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/SearchBar";
 import { useCart } from "@/app/providers";
@@ -26,6 +26,10 @@ export function Header() {
             </Link>
             <Link href="/products" className="text-muted-foreground hover:text-primary transition-colors">
               Products
+            </Link>
+            <Link href="/discountFrontend" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+              <Tag className="h-4 w-4" />
+              Discounts
             </Link>
             <Link href="/wallet" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
               <Wallet className="h-4 w-4" />

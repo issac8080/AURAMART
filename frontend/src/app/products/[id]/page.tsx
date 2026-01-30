@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ProductCard } from "@/components/ProductCard";
 import { useCart } from "@/app/providers";
 import { fetchProduct, fetchRecommendations, trackEvent } from "@/lib/api";
+import { recordProductView } from "@/discountFrontend/api";
 import { formatPrice } from "@/lib/utils";
 import type { Product } from "@/lib/api";
 
@@ -22,7 +23,7 @@ export default function ProductDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !sessionId) return;
     trackEvent({
       event_type: "product_click",
       session_id: sessionId,
@@ -34,6 +35,7 @@ export default function ProductDetailPage() {
       product_id: id,
       metadata: { page: "product_detail" },
     });
+    recordProductView(sessionId, id, sessionId).catch(() => {});
   }, [id, sessionId]);
 
   useEffect(() => {
