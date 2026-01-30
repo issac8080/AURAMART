@@ -104,6 +104,12 @@ def remove_from_cart(session_id: str, product_id: str) -> None:
         _carts[session_id].remove(product_id)
 
 
+def clear_cart(session_id: str) -> None:
+    """Clear all items from cart."""
+    if session_id in _carts:
+        _carts[session_id] = []
+
+
 def set_profile(session_id: str, profile: dict) -> None:
     _profiles[session_id] = profile
 

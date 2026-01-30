@@ -76,8 +76,8 @@ def get_cashback_rate(order_total: float) -> float:
         return AURAPOINTS_RATE_LOW * 100
 
 
-def add_cashback(user_id: str, order_id: str, order_total: float) -> WalletTransaction:
-    """Add AuraPoints to wallet after order completion."""
+def add_pending_points(user_id: str, order_id: str, order_total: float) -> WalletTransaction:
+    """Add pending AuraPoints to wallet immediately after order placement."""
     wallet = get_wallet(user_id)
     points_amount = calculate_cashback(order_total)
     points_rate = get_cashback_rate(order_total)
@@ -93,6 +93,59 @@ def add_cashback(user_id: str, order_id: str, order_total: float) -> WalletTrans
         source="aurapoints",
         order_id=order_id,
         description=f"{points_rate:.0f}% AuraPoints on order {order_id}",
+        status="pending",  # Pending until delivery
+        expires_at=expires_at.isoformat(),
+        created_at=now.isoformat(),
+        is_expired=False,
+    )
+    
+    # Don't add to balance yet (pending)
+    wallet.transactions.append(transaction)
+    _wallets[user_id] = wallet
+    
+    return transaction
+
+
+def activate_pending_points(order_id: str) -> Optional[WalletTransaction]:
+    """Activate pending AuraPoints when order is delivered."""
+    # Find the pending transaction for this order
+    for user_id, wallet in _wallets.items():
+        for txn in wallet.transactions:
+            if txn.order_id == order_id and txn.status == "pending" and txn.source == "aurapoints":
+                # Activate the points
+                txn.status = "active"
+                wallet.balance += txn.amount
+                wallet.total_earned += txn.amount
+                _wallets[user_id] = wallet
+                return txn
+    return None
+
+
+def add_cashback(user_id: str, order_id: str, order_total: float) -> WalletTransaction:
+    """Add AuraPoints to wallet after order completion (legacy method)."""
+    # Check if already pending
+    wallet = get_wallet(user_id)
+    for txn in wallet.transactions:
+        if txn.order_id == order_id and txn.source == "aurapoints":
+            # Already exists, just activate it
+            return activate_pending_points(order_id) or txn
+    
+    # Create new active transaction
+    points_amount = calculate_cashback(order_total)
+    points_rate = get_cashback_rate(order_total)
+    
+    now = datetime.utcnow()
+    expires_at = now + timedelta(days=AURAPOINTS_VALIDITY_DAYS)
+    
+    transaction = WalletTransaction(
+        id=f"TXN-{uuid.uuid4().hex[:8].upper()}",
+        user_id=user_id,
+        amount=points_amount,
+        type="credit",
+        source="aurapoints",
+        order_id=order_id,
+        description=f"{points_rate:.0f}% AuraPoints on order {order_id}",
+        status="active",
         expires_at=expires_at.isoformat(),
         created_at=now.isoformat(),
         is_expired=False,
@@ -146,6 +199,7 @@ def add_refund(user_id: str, order_id: str, amount: float) -> WalletTransaction:
         source="refund",
         order_id=order_id,
         description=f"Refund for order {order_id}",
+        status="active",
         created_at=now.isoformat(),
     )
     
@@ -157,13 +211,39 @@ def add_refund(user_id: str, order_id: str, amount: float) -> WalletTransaction:
     return transaction
 
 
+def add_money_to_wallet(user_id: str, amount: float, payment_method: str = "razorpay") -> WalletTransaction:
+    """Add money to wallet (top-up)."""
+    wallet = get_wallet(user_id)
+    now = datetime.utcnow()
+    
+    transaction = WalletTransaction(
+        id=f"TXN-{uuid.uuid4().hex[:8].upper()}",
+        user_id=user_id,
+        amount=amount,
+        type="credit",
+        source="topup",
+        description=f"Added money via {payment_method}",
+        status="active",
+        created_at=now.isoformat(),
+        is_expired=False,
+    )
+    
+    wallet.balance += amount
+    wallet.total_earned += amount
+    wallet.transactions.append(transaction)
+    _wallets[user_id] = wallet
+    
+    return transaction
+
+
 def get_wallet_summary(user_id: str) -> dict:
-    """Get wallet summary with active and expiring AuraPoints."""
+    """Get wallet summary with active, pending, and expiring AuraPoints."""
     wallet = get_wallet(user_id)
     now = datetime.utcnow()
     soon_expiry = now + timedelta(days=7)  # Expiring in next 7 days
     
     active_points = 0.0
+    pending_points = 0.0
     expiring_soon = 0.0
     
     for txn in wallet.transactions:
@@ -175,15 +255,19 @@ def get_wallet_summary(user_id: str) -> dict:
         ):
             expiry = datetime.fromisoformat(txn.expires_at)
             if expiry > now:
-                active_points += txn.amount
-                if expiry <= soon_expiry:
-                    expiring_soon += txn.amount
+                if txn.status == "pending":
+                    pending_points += txn.amount
+                elif txn.status == "active":
+                    active_points += txn.amount
+                    if expiry <= soon_expiry:
+                        expiring_soon += txn.amount
     
     return {
         "balance": wallet.balance,
         "total_earned": wallet.total_earned,
         "total_spent": wallet.total_spent,
         "active_points": active_points,
+        "pending_points": pending_points,
         "expiring_soon": expiring_soon,
         "transaction_count": len(wallet.transactions),
     }

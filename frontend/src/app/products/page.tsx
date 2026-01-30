@@ -82,22 +82,22 @@ export default function ProductsPage() {
   const categoryList = categories.length > 0 ? categories : ["Clothing", "Electronics", "Accessories", "Footwear"];
 
   return (
-    <div className="py-6 space-y-6">
+    <div className="py-4 sm:py-6 space-y-5 sm:space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Products</h1>
-        <p className="text-muted-foreground">Browse with smart filters</p>
+        <h1 className="font-heading text-fluid-2xl sm:text-fluid-3xl font-bold tracking-tight">Products</h1>
+        <p className="text-fluid-sm text-muted-foreground mt-0.5">Browse with smart filters</p>
       </div>
 
       {topPicks.length > 0 && (
         <motion.section
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="rounded-xl border bg-primary/5 p-4"
+          className="rounded-xl sm:rounded-2xl border border-primary/20 bg-primary/5 p-4"
         >
-          <h2 className="text-sm font-semibold text-primary mb-3">Top picks based on your browsing</h2>
-          <div className="flex gap-4 overflow-x-auto pb-2">
+          <h2 className="font-heading font-bold text-fluid-sm text-primary mb-3">Top picks based on your browsing</h2>
+          <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 scrollbar-hide">
             {topPicks.map((p) => (
-              <div key={p.id} className="flex-shrink-0 w-[160px]">
+              <div key={p.id} className="flex-shrink-0 w-[165px] sm:w-[200px]">
                 <ProductCard
                   product={p}
                   sessionId={sessionId}
@@ -110,14 +110,14 @@ export default function ProductsPage() {
         </motion.section>
       )}
 
-      <section className="flex flex-col md:flex-row gap-6">
-        <aside className="md:w-56 flex-shrink-0 space-y-4">
+      <section className="flex flex-col md:flex-row gap-4 sm:gap-6">
+        <aside className="md:w-56 flex-shrink-0 space-y-4 p-4 sm:p-0 rounded-xl sm:rounded-none bg-muted/40 sm:bg-transparent border border-border/60 sm:border-0">
           <div>
-            <label className="text-sm font-medium">Category</label>
+            <label className="text-fluid-sm font-medium">Category</label>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+              className="mt-1.5 w-full rounded-xl border border-input bg-background px-3 py-2.5 text-fluid-sm"
             >
               <option value="">All</option>
               {categoryList.map((c) => (
@@ -126,27 +126,27 @@ export default function ProductsPage() {
             </select>
           </div>
           <div>
-            <label className="text-sm font-medium">Min price (₹)</label>
+            <label className="text-fluid-sm font-medium">Min price (₹)</label>
             <Input
               type="number"
               placeholder="0"
               value={minPrice}
               onChange={(e) => setMinPrice(e.target.value)}
-              className="mt-1"
+              className="mt-1.5 rounded-xl"
             />
           </div>
           <div>
-            <label className="text-sm font-medium">Max price (₹)</label>
+            <label className="text-fluid-sm font-medium">Max price (₹)</label>
             <Input
               type="number"
               placeholder="Any"
               value={maxPrice}
               onChange={(e) => setMaxPrice(e.target.value)}
-              className="mt-1"
+              className="mt-1.5 rounded-xl"
             />
           </div>
           <div>
-            <label className="text-sm font-medium">Min rating</label>
+            <label className="text-fluid-sm font-medium">Min rating</label>
             <Input
               type="number"
               min={0}
@@ -155,25 +155,25 @@ export default function ProductsPage() {
               placeholder="0"
               value={minRating}
               onChange={(e) => setMinRating(e.target.value)}
-              className="mt-1"
+              className="mt-1.5 rounded-xl"
             />
           </div>
         </aside>
 
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           {loading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
               {[...Array(8)].map((_, i) => (
-                <div key={i} className="h-72 rounded-xl bg-muted animate-pulse" />
+                <div key={i} className="aspect-[3/4] sm:h-72 rounded-xl sm:rounded-2xl bg-muted/80 animate-pulse" />
               ))}
             </div>
           ) : products.length === 0 ? (
-            <p className="text-muted-foreground py-12 text-center">No products match your filters.</p>
+            <p className="text-fluid-base text-muted-foreground py-12 text-center">No products match your filters.</p>
           ) : (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"
+              className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4"
             >
               {products.map((product) => (
                 <ProductCard

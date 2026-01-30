@@ -1,34 +1,21 @@
 /**
- * Unsplash image URLs for product categories and backgrounds.
- * Using Unsplash Source API for random high-quality images.
+ * Product and background image URLs.
+ * Uses Picsum Photos (reliable, no API key) - Unsplash Source was deprecated and returns 503.
  */
 
-const UNSPLASH_BASE = "https://source.unsplash.com";
+const PICSUM_BASE = "https://picsum.photos";
 
 export function getProductImage(category: string, id: string): string {
-  const categoryMap: Record<string, string> = {
-    Clothing: "fashion,clothing",
-    Electronics: "technology,gadgets",
-    Accessories: "accessories,fashion",
-    Footwear: "shoes,sneakers",
-  };
-  const query = categoryMap[category] || "product,shopping";
-  // Use id as seed for consistent images per product
-  const seed = id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  return `${UNSPLASH_BASE}/400x400/?${query}&sig=${seed}`;
+  // Use product id as seed for consistent image per product
+  const seed = id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20) || "product";
+  return `${PICSUM_BASE}/seed/${seed}/400/400`;
 }
 
 export function getHeroBackground(): string {
-  return `${UNSPLASH_BASE}/1920x1080/?shopping,fashion,modern&blur`;
+  return `${PICSUM_BASE}/seed/hero/1920/1080?blur=2`;
 }
 
 export function getCategoryBackground(category: string): string {
-  const categoryMap: Record<string, string> = {
-    Clothing: "fashion,style",
-    Electronics: "technology,modern",
-    Accessories: "luxury,accessories",
-    Footwear: "shoes,style",
-  };
-  const query = categoryMap[category] || "shopping";
-  return `${UNSPLASH_BASE}/1920x600/?${query}&blur=2`;
+  const seed = category.replace(/\s+/g, "").slice(0, 15) || "category";
+  return `${PICSUM_BASE}/seed/${seed}/1920/600?blur=2`;
 }

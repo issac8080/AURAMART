@@ -93,7 +93,7 @@ export default function ProfilePage() {
     <div className="py-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">My Profile</h1>
+          <h1 className="font-heading text-fluid-2xl sm:text-fluid-3xl font-bold tracking-tight">My Profile</h1>
           <p className="text-muted-foreground">Manage your account and orders</p>
         </div>
         <div className="flex gap-2">

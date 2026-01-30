@@ -1,9 +1,22 @@
 import type { Metadata } from "next";
+import { Syne, DM_Sans } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/Header";
 import { ChatWidget } from "@/components/ChatWidget";
 import { BackendOfflineBanner } from "@/components/BackendOfflineBanner";
 import { Providers } from "./providers";
+
+const syne = Syne({
+  subsets: ["latin"],
+  variable: "--font-heading",
+  display: "swap",
+});
+
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-body",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "AuraShop – AI-Powered Shopping Assistant",
@@ -16,12 +29,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className="min-h-screen antialiased font-sans">
+    <html lang="en" suppressHydrationWarning className={`${syne.variable} ${dmSans.variable}`}>
+      <body className="min-h-screen antialiased font-sans text-foreground">
         <Providers>
           <BackendOfflineBanner />
           <Header />
-          <main className="container mx-auto px-4 pb-24">
+          <main className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl pb-28 sm:pb-24">
             {children}
           </main>
           <ChatWidget />

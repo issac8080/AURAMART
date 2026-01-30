@@ -132,10 +132,11 @@ class WalletTransaction(BaseModel):
     user_id: str
     amount: float
     type: str  # "credit" or "debit"
-    source: str  # "cashback", "refund", "purchase"
+    source: str  # "aurapoints", "refund", "purchase"
     order_id: Optional[str] = None
     description: str
-    expires_at: Optional[str] = None  # For cashback with 1 month validity
+    status: str = "active"  # "pending", "active", "expired"
+    expires_at: Optional[str] = None  # For aurapoints with 1 month validity
     created_at: str
     is_expired: bool = False
 
@@ -152,3 +153,9 @@ class Wallet(BaseModel):
 class ApplyWalletRequest(BaseModel):
     order_id: str
     amount: float
+
+
+class AddMoneyRequest(BaseModel):
+    user_id: str
+    amount: float
+    payment_method: str = "razorpay"

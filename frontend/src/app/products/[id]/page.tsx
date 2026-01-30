@@ -130,21 +130,21 @@ export default function ProductDetailPage() {
             }}
           />
           {!product.image_url && (
-            <div className="w-full h-full flex items-center justify-center text-6xl font-bold text-muted-foreground/30">
+            <div className="w-full h-full flex items-center justify-center font-heading text-fluid-4xl sm:text-fluid-5xl font-bold text-muted-foreground/30">
               {product.name.slice(0, 1)}
             </div>
           )}
         </div>
 
         <div className="space-y-4">
-          <h1 className="text-2xl font-bold">{product.name}</h1>
+          <h1 className="font-heading text-2xl sm:text-3xl font-bold tracking-tight">{product.name}</h1>
           <p className="text-muted-foreground">{product.category}</p>
           <div className="flex items-center gap-2">
             <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
             <span className="font-medium">{product.rating}</span>
             <span className="text-muted-foreground">({product.review_count} reviews)</span>
           </div>
-          <p className="text-3xl font-bold text-primary">{formatPrice(product.price)}</p>
+          <p className="font-heading text-fluid-2xl sm:text-fluid-3xl font-bold text-primary">{formatPrice(product.price)}</p>
           <p className="text-muted-foreground">{product.description}</p>
           {product.colors?.length ? (
             <div>
@@ -178,9 +178,9 @@ export default function ProductDetailPage() {
       </motion.div>
 
       {whyRight.length > 0 && (
-        <Card className="border-primary/20 bg-primary/5">
+        <Card className="border-indigo-500/20 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 glass-card">
           <CardContent className="p-4">
-            <h2 className="font-semibold text-primary mb-2">Why this product is right for you</h2>
+            <h2 className="font-heading font-bold text-primary mb-2 flex items-center gap-2"><Sparkles className="h-4 w-4" /> Why this product is right for you</h2>
             <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
               {whyRight.map((line, i) => (
                 <li key={i}>{line}</li>
@@ -192,7 +192,7 @@ export default function ProductDetailPage() {
 
       {similar.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold mb-4">Similar & alternatives</h2>
+          <h2 className="font-heading text-fluid-lg font-bold mb-4">Similar & alternatives</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {similar.map((p) => (
               <ProductCard

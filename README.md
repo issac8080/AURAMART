@@ -217,6 +217,27 @@ This project is **100% demo-ready** with:
 - ✅ Comprehensive documentation
 - ✅ Clear demo flow and talking points
 
+## Troubleshooting
+
+### `ECONNRESET` / "Failed to proxy http://localhost:8000/..."
+
+The frontend proxies `/api/*` to the backend. This error means **the backend is not running** or the connection was reset.
+
+**Fix:** Start the backend first in a separate terminal:
+
+```bash
+cd backend
+.venv\Scripts\activate   # Windows
+# source .venv/bin/activate  # macOS/Linux
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Keep this running, then use the frontend at `http://localhost:3000`. The app will show a "Backend not running" banner until the backend is up.
+
+### "upstream image response failed" (503)
+
+Product and hero images use **Picsum Photos** (no API key, reliable). If you see 503 from an image URL, it’s usually temporary; refresh the page. Unsplash Source was deprecated and is no longer used.
+
 ## License
 
 MIT.

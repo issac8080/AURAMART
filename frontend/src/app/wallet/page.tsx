@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Wallet as WalletIcon, TrendingUp, TrendingDown, Clock, Gift, ArrowLeft, Sparkles } from "lucide-react";
+import { Wallet as WalletIcon, TrendingUp, TrendingDown, Clock, Gift, ArrowLeft, Sparkles, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +34,8 @@ type Summary = {
   balance: number;
   total_earned: number;
   total_spent: number;
-  active_cashback: number;
+  active_points: number;
+  pending_points: number;
   expiring_soon: number;
   transaction_count: number;
 };
@@ -46,6 +47,9 @@ export default function WalletPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAddMoney, setShowAddMoney] = useState(false);
+  const [addAmount, setAddAmount] = useState("");
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     async function loadWallet() {
@@ -106,7 +110,7 @@ export default function WalletPage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <h1 className="font-heading text-fluid-2xl sm:text-fluid-3xl font-bold tracking-tight flex items-center gap-2">
             <Sparkles className="h-6 w-6 text-primary" />
             Aura Wallet
           </h1>
@@ -123,9 +127,19 @@ export default function WalletPage() {
         >
           <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-purple-500/5">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <WalletIcon className="h-5 w-5 text-primary" />
-                Wallet Balance
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <WalletIcon className="h-5 w-5 text-primary" />
+                  Wallet Balance
+                </div>
+                <Button 
+                  size="sm" 
+                  onClick={() => setShowAddMoney(true)}
+                  className="gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Money
+                </Button>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -146,7 +160,7 @@ export default function WalletPage() {
                       Total Earned
                     </span>
                   </div>
-                  <p className="text-2xl font-bold text-emerald-600">
+                  <p className="font-heading text-fluid-2xl font-bold text-emerald-600">
                     {formatPrice(summary?.total_earned || 0)}
                   </p>
                 </div>
@@ -163,6 +177,20 @@ export default function WalletPage() {
                   </p>
                 </div>
               </div>
+
+              {summary && summary.pending_points > 0 && (
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                  <Clock className="h-5 w-5 text-blue-600 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-blue-700 dark:text-blue-400">
+                      {formatPrice(summary.pending_points)} pending
+                    </p>
+                    <p className="text-sm text-blue-600/80 dark:text-blue-400/80">
+                      Will be available after order delivery
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {summary && summary.expiring_soon > 0 && (
                 <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
@@ -248,7 +276,9 @@ export default function WalletPage() {
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       className={`flex items-center justify-between p-4 rounded-lg border ${
-                        txn.is_expired ? "opacity-50 bg-muted/30" : "bg-muted/50"
+                        txn.is_expired ? "opacity-50 bg-muted/30" : 
+                        (txn as any).status === "pending" ? "bg-blue-500/5 border-blue-500/20" : 
+                        "bg-muted/50"
                       }`}
                     >
                       <div className="flex items-start gap-3 flex-1">
@@ -259,7 +289,13 @@ export default function WalletPage() {
                             <p className="text-xs text-muted-foreground">
                               {new Date(txn.created_at).toLocaleDateString()}
                             </p>
-                            {txn.expires_at && !txn.is_expired && (
+                            {(txn as any).status === "pending" && (
+                              <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-700 border-blue-500/20">
+                                <Clock className="h-3 w-3 mr-1" />
+                                Pending Delivery
+                              </Badge>
+                            )}
+                            {txn.expires_at && !txn.is_expired && (txn as any).status === "active" && (
                               <Badge variant="outline" className="text-xs">
                                 <Clock className="h-3 w-3 mr-1" />
                                 Expires {new Date(txn.expires_at).toLocaleDateString()}
@@ -273,7 +309,7 @@ export default function WalletPage() {
                           </div>
                         </div>
                       </div>
-                      <p className={`font-bold ${getTransactionColor(txn.type)}`}>
+                      <p className={`font-bold ${(txn as any).status === "pending" ? "text-blue-600" : getTransactionColor(txn.type)}`}>
                         {txn.type === "credit" ? "+" : "-"}
                         {formatPrice(txn.amount)}
                       </p>
@@ -285,6 +321,75 @@ export default function WalletPage() {
           </Card>
         </div>
       </div>
+
+      {/* Add Money Modal */}
+      {showAddMoney && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-background rounded-lg p-6 max-w-md w-full space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="font-heading text-fluid-xl font-bold">Add Money to Wallet</h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowAddMoney(false)}
+                disabled={adding}
+              >
+                ×
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Amount (₹)</label>
+                <input
+                  type="number"
+                  placeholder="Enter amount"
+                  value={addAmount}
+                  onChange={(e) => setAddAmount(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  disabled={adding}
+                  min="1"
+                  max="100000"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Min: ₹1 | Max: ₹100,000
+                </p>
+              </div>
+
+              <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <p className="text-sm text-blue-700 dark:text-blue-400">
+                  💳 Payment via Razorpay (Integration pending)
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  For demo purposes, money will be added instantly
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowAddMoney(false)}
+                  disabled={adding}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={handleAddMoney}
+                  disabled={adding}
+                >
+                  {adding ? "Adding..." : "Add Money"}
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
