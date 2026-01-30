@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Sparkles, TrendingUp, Zap, MessageCircle, ChevronDown } from "lucide-react";
 import { ProductCarousel } from "@/components/ProductCarousel";
+import { FestivalBanner } from "@/discountFrontend/FestivalBanner";
 import { useCart } from "@/app/providers";
 import { fetchProducts, fetchRecommendations, trackEvent } from "@/lib/api";
 import { getHeroBackground } from "@/lib/unsplash";
@@ -186,6 +187,8 @@ export default function HomePage() {
           </motion.div>
         </div>
       </motion.section>
+
+      <FestivalBanner />
 
       {loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">

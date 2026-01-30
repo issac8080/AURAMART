@@ -3,13 +3,16 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { ShoppingBag, Home, Store, Check, ArrowLeft, Sparkles, Clock } from "lucide-react";
+import { ShoppingBag, Home, Store, Check, ArrowLeft, Tag, Sparkles, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useCart } from "@/app/providers";
 import { formatPrice } from "@/lib/utils";
 import Link from "next/link";
+import { fetchApplicableDiscounts } from "@/discountFrontend/api";
+import { DiscountCard } from "@/discountFrontend/DiscountCard";
+import type { AppliedDiscount } from "@/discountFrontend/types";
 
 const API = "/api";
 
@@ -31,8 +34,17 @@ export default function CheckoutPage() {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [cashbackPreview, setCashbackPreview] = useState<{ amount: number; rate: string } | null>(null);
+  const [discounts, setDiscounts] = useState<AppliedDiscount[]>([]);
 
   const total = cart.reduce((sum, p) => sum + p.price, 0);
+  const cartItemsForDiscount = cart.map((p) => ({
+    product_id: p.id,
+    price: p.price,
+    quantity: 1,
+    brand: p.brand,
+  }));
+  const totalDiscountAmount = discounts.reduce((sum, d) => sum + d.amount, 0);
+  const totalAfterDiscount = Math.max(0, total - totalDiscountAmount);
 
   useEffect(() => {
     async function loadCart() {
@@ -73,6 +85,19 @@ export default function CheckoutPage() {
     }
     previewCashback();
   }, [total]);
+
+  useEffect(() => {
+    if (!sessionId || total <= 0) return;
+    const items = cart.map((p) => ({
+      product_id: p.id,
+      price: p.price,
+      quantity: 1,
+      brand: p.brand,
+    }));
+    fetchApplicableDiscounts(sessionId, sessionId, total, items)
+      .then((data) => setDiscounts(data.discounts || []))
+      .catch(() => setDiscounts([]));
+  }, [sessionId, total, cart.length, cart.map((p) => p.id).join(",")]);
 
   const handlePlaceOrder = async () => {
     if (!name || !phone) {
@@ -271,10 +296,29 @@ export default function CheckoutPage() {
                   </div>
                 ))}
               </div>
+              {discounts.length > 0 && (
+                <div className="space-y-2 border-t pt-4">
+                  <p className="text-sm font-medium flex items-center gap-1">
+                    <Tag className="h-4 w-4 text-primary" />
+                    Applicable discounts
+                  </p>
+                  <div className="space-y-2 max-h-32 overflow-y-auto">
+                    {discounts.map((d) => (
+                      <DiscountCard key={`${d.discount_type}-${d.product_id ?? ""}`} discount={d} />
+                    ))}
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    You save ₹{totalDiscountAmount.toFixed(0)} (total after discounts: {formatPrice(totalAfterDiscount)})
+                  </p>
+                </div>
+              )}
+
               <div className="border-t pt-4">
                 <div className="flex justify-between font-bold text-fluid-lg">
                   <span>Total</span>
-                  <span className="text-primary">{formatPrice(total)}</span>
+                  <span className="text-primary">
+                    {discounts.length > 0 ? formatPrice(totalAfterDiscount) : formatPrice(total)}
+                  </span>
                 </div>
               </div>
               
