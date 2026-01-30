@@ -10,7 +10,8 @@ backend/*.pyd
 backend/.Python
 backend/pip-log.txt
 backend/pip-delete-this-directory.txt
-
+backend/venv/
+backend/data/
 # Frontend
 frontend/node_modules/
 frontend/.next/

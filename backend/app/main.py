@@ -25,7 +25,7 @@ from app.data_store import (
     remove_from_cart,
     get_session_context,
 )
-from app.ai_service import get_recommendations, chat as ai_chat
+from app.recommend_bridge import get_recommendations, chat as ai_chat
 from app.order_service import (
     create_order,
     get_order,
@@ -119,7 +119,7 @@ def recommendations(
     category: str | None = Query(None),
     exclude_product_ids: str | None = Query(None),  # comma-separated
 ):
-    exclude = exclude_product_ids.split(",") if exclude_product_ids else None
+    exclude = [x.strip() for x in exclude_product_ids.split(",")] if exclude_product_ids else None
     recs = get_recommendations(
         session_id=session_id,
         limit=limit,
@@ -130,12 +130,25 @@ def recommendations(
     return {"recommendations": recs}
 
 
+@app.get("/recommendations/engine")
+def recommendations_engine(
+    user_id: str = Query(..., description="User ID (or session ID for guest)"),
+    type: str = Query("category", description="category | search_no_buy | already_bought | out_of_stock_notify | festival | habits"),
+    limit: int = Query(10, le=50),
+):
+    """Recommend module engine: user-based recs by type (category, habits, festival, etc.)."""
+    from recommend.recommendation_engine import get_recommendations as engine_get_recommendations
+    recs = engine_get_recommendations(user_id=user_id, rec_type=type.strip().lower(), limit=limit)
+    return {"recommendations": recs}
+
+
 @app.post("/chat")
 def chat_endpoint(body: ChatRequest):
     result = ai_chat(
         session_id=body.session_id,
         message=body.message,
         history=body.history,
+        user_id=body.user_id,
     )
     return result
 
