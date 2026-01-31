@@ -1,17 +1,15 @@
 """
 In-memory data store for sessions, events, and user preferences.
-Used for real-time personalization and recommendation context.
+Products and carts are read/written from recommend DB only. JSON is synced into DB on startup (db_sync).
 """
-import json
-from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from app.models import EventPayload, Product, EventType
 
-# Load synthetic products once
-PRODUCTS_PATH = Path(__file__).resolve().parent.parent / "data" / "products.json"
+# Products: loaded from recommend DB (cached in memory)
 _products: List[Product] = []
 _products_by_id: Dict[str, Product] = {}
+_products_loaded = False
 
 # Session events: session_id -> list of events
 _events: Dict[str, List[dict]] = {}
@@ -19,37 +17,60 @@ _events: Dict[str, List[dict]] = {}
 # User preference profiles (derived from events): session_id -> profile
 _profiles: Dict[str, dict] = {}
 
-# Cart per session: session_id -> list of product_ids
-_carts: Dict[str, List[str]] = {}
-
 # Recommendation cache: (session_id, context_hash) -> list of recs (optional TTL)
 _rec_cache: Dict[str, List[dict]] = {}
 _CACHE_MAX = 500
 
 
+def _db_product_to_app(db_p: Any) -> Product:
+    """Map recommend.models_db.Product to app.models.Product."""
+    return Product(
+        id=db_p.id,
+        name=db_p.name or "",
+        description=db_p.description or "",
+        price=float(db_p.price) if db_p.price is not None else 0.0,
+        currency=db_p.currency or "INR",
+        category=db_p.category or "",
+        subcategory=db_p.subcategory,
+        brand=db_p.brand,
+        rating=float(db_p.rating) if db_p.rating is not None else 0.0,
+        review_count=int(db_p.review_count) if db_p.review_count is not None else 0,
+        colors=list(db_p.colors) if db_p.colors is not None else [],
+        sizes=list(db_p.sizes) if db_p.sizes is not None else [],
+        image_url=db_p.image_url,
+        tags=list(db_p.tags) if db_p.tags is not None else [],
+        in_stock=db_p.in_stock if db_p.in_stock is not None else True,
+        stock_count=db_p.stock_count,
+    )
+
+
 def load_products() -> List[Product]:
-    global _products, _products_by_id
-    if _products:
+    """Load products from recommend DB only (cached in memory)."""
+    global _products, _products_by_id, _products_loaded
+    if _products_loaded and _products:
         return _products
+    _products_loaded = True
     try:
-        if not PRODUCTS_PATH.exists():
+        from recommend.db import get_session
+        from recommend.models_db import Product as DbProduct
+
+        session = get_session()
+        try:
+            rows = session.query(DbProduct).all()
+            _products = []
+            for p in rows:
+                try:
+                    _products.append(_db_product_to_app(p))
+                except Exception:
+                    continue
+            _products_by_id = {p.id: p for p in _products}
             return _products
-        with open(PRODUCTS_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, list):
-            data = []
-        _products = []
-        for p in data:
-            try:
-                _products.append(Product(**p))
-            except Exception:
-                continue
-        _products_by_id = {p.id: p for p in _products}
-        return _products
+        finally:
+            session.close()
     except Exception:
         _products = []
         _products_by_id = {}
-        return _products
+    return _products
 
 
 def get_product(product_id: str) -> Optional[Product]:
@@ -107,48 +128,137 @@ def _actor_id(session_id: str, user_id: Optional[str] = None) -> str:
     return (user_id or "").strip() or session_id
 
 
+def _cart_query(session, session_id: str, user_id: Optional[str]):
+    """Query Cart rows for actor: by user_id if logged in, else by session_id."""
+    from recommend.models_db import Cart as DbCart
+
+    if user_id and user_id.strip():
+        return session.query(DbCart).filter(DbCart.user_id == user_id.strip()).all()
+    return session.query(DbCart).filter(DbCart.session_id == session_id).all()
+
+
 def get_cart(session_id: str, user_id: Optional[str] = None) -> List[str]:
-    key = _actor_id(session_id, user_id)
-    return list(_carts.get(key, []))
+    """Cart from recommend DB only: list of product_ids (with quantity as repeats)."""
+    try:
+        from recommend.db import get_session
+        from recommend.models_db import Cart as DbCart
+
+        session = get_session()
+        try:
+            rows = _cart_query(session, session_id, user_id)
+            out = []
+            for r in rows:
+                qty = max(1, int(r.quantity) if r.quantity is not None else 1)
+                out.extend([r.product_id] * qty)
+            return out
+        finally:
+            session.close()
+    except Exception:
+        return []
 
 
 def add_to_cart(session_id: str, product_id: str, user_id: Optional[str] = None) -> None:
-    key = _actor_id(session_id, user_id)
-    if key not in _carts:
-        _carts[key] = []
-    if product_id not in _carts[key]:
-        _carts[key].append(product_id)
+    """Add one item to cart in recommend DB."""
+    try:
+        from recommend.db import get_session
+        from recommend.models_db import Cart as DbCart
+
+        session = get_session()
+        try:
+            uid = user_id.strip() if user_id and user_id.strip() else None
+            sid = None if uid else session_id
+            if uid:
+                existing = session.query(DbCart).filter(DbCart.user_id == uid, DbCart.product_id == product_id).first()
+            else:
+                existing = session.query(DbCart).filter(DbCart.session_id == session_id, DbCart.product_id == product_id).first()
+            if existing:
+                existing.quantity = (existing.quantity or 1) + 1
+            else:
+                session.add(
+                    DbCart(
+                        user_id=uid,
+                        session_id=sid,
+                        product_id=product_id,
+                        quantity=1,
+                    )
+                )
+            session.commit()
+        finally:
+            session.close()
+    except Exception:
+        pass
 
 
 def remove_from_cart(session_id: str, product_id: str, user_id: Optional[str] = None) -> None:
-    key = _actor_id(session_id, user_id)
-    if key in _carts and product_id in _carts[key]:
-        _carts[key].remove(product_id)
+    """Remove one occurrence of product from cart in recommend DB."""
+    try:
+        from recommend.db import get_session
+        from recommend.models_db import Cart as DbCart
+
+        session = get_session()
+        try:
+            uid = user_id.strip() if user_id and user_id.strip() else None
+            if uid:
+                row = session.query(DbCart).filter(DbCart.user_id == uid, DbCart.product_id == product_id).first()
+            else:
+                row = session.query(DbCart).filter(DbCart.session_id == session_id, DbCart.product_id == product_id).first()
+            if row:
+                if (row.quantity or 1) > 1:
+                    row.quantity -= 1
+                else:
+                    session.delete(row)
+                session.commit()
+        finally:
+            session.close()
+    except Exception:
+        pass
 
 
 def clear_cart(session_id: str, user_id: Optional[str] = None) -> None:
-    """Clear all items from cart."""
-    key = _actor_id(session_id, user_id)
-    if key in _carts:
-        _carts[key] = []
+    """Clear all items from cart in recommend DB."""
+    try:
+        from recommend.db import get_session
+        from recommend.models_db import Cart as DbCart
+
+        session = get_session()
+        try:
+            uid = user_id.strip() if user_id and user_id.strip() else None
+            if uid:
+                session.query(DbCart).filter(DbCart.user_id == uid).delete()
+            else:
+                session.query(DbCart).filter(DbCart.session_id == session_id).delete()
+            session.commit()
+        finally:
+            session.close()
+    except Exception:
+        pass
 
 
 def merge_cart_into_user(session_id: str, user_id: str) -> None:
-    """Merge guest cart (session_id) into user cart (user_id) and clear guest cart. Call after login."""
+    """Merge guest cart (session_id) into user cart (user_id) and clear guest cart in recommend DB."""
     if not (user_id and user_id.strip()):
         return
     user_id = user_id.strip()
-    guest_ids = _carts.get(session_id, [])
-    if not guest_ids:
-        return
-    user_cart = _carts.get(user_id, [])
-    seen = set(user_cart)
-    for pid in guest_ids:
-        if pid not in seen:
-            user_cart.append(pid)
-            seen.add(pid)
-    _carts[user_id] = user_cart
-    _carts[session_id] = []
+    try:
+        from recommend.db import get_session
+        from recommend.models_db import Cart as DbCart
+
+        session = get_session()
+        try:
+            guest_rows = session.query(DbCart).filter(DbCart.session_id == session_id).all()
+            for row in guest_rows:
+                existing = session.query(DbCart).filter(DbCart.user_id == user_id, DbCart.product_id == row.product_id).first()
+                if existing:
+                    existing.quantity = (existing.quantity or 1) + (row.quantity or 1)
+                    session.delete(row)
+                else:
+                    row.session_id = None
+                    row.user_id = user_id
+            session.commit()
+        finally:
+            session.close()
+    except Exception:
+        pass
 
 
 def set_profile(session_id: str, profile: dict, user_id: Optional[str] = None) -> None:

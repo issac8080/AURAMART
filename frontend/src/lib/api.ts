@@ -54,6 +54,63 @@ export type RecommendationItem = {
   product?: Partial<Product>;
 };
 
+/** Engine rec types: category | search_no_buy | already_bought | out_of_stock_notify | festival | habits */
+export type EngineRecType =
+  | "category"
+  | "search_no_buy"
+  | "already_bought"
+  | "out_of_stock_notify"
+  | "festival"
+  | "habits";
+
+/** Ensure a numeric value is finite; avoid NaN being passed to React children. */
+function safeNum(value: unknown, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/** Normalize engine rec item (id or product_id, optional fields) to Product. */
+function engineRecToProduct(rec: Record<string, unknown>): Product {
+  const id = (rec.id ?? rec.product_id ?? "") as string;
+  return {
+    id,
+    name: (rec.name as string) ?? "",
+    description: (rec.description as string) ?? "",
+    price: safeNum(rec.price, 0),
+    currency: (rec.currency as string) ?? "INR",
+    category: (rec.category as string) ?? "",
+    rating: safeNum(rec.rating, 0),
+    review_count: safeNum(rec.review_count, 0),
+    colors: Array.isArray(rec.colors) ? (rec.colors as string[]) : [],
+    sizes: Array.isArray(rec.sizes) ? (rec.sizes as string[]) : [],
+    tags: Array.isArray(rec.tags) ? (rec.tags as string[]) : [],
+    in_stock: rec.in_stock !== false,
+    image_url: rec.image_url as string | undefined,
+    stock_count: rec.stock_count != null && Number.isFinite(Number(rec.stock_count)) ? Number(rec.stock_count) : undefined,
+  };
+}
+
+export async function fetchRecommendationsByEngine(
+  actorId: string,
+  type: EngineRecType,
+  limit: number = 10
+): Promise<{ recommendations: Product[] }> {
+  try {
+    const search = new URLSearchParams({ user_id: actorId, type, limit: String(limit) });
+    const res = await fetch(`${API}/recommendations/engine?${search}`);
+    if (!res.ok) throw new Error("Failed to fetch engine recommendations");
+    const data = (await res.json()) as { recommendations?: Record<string, unknown>[] };
+    const raw = data.recommendations ?? [];
+    const products = raw
+      .map((r) => engineRecToProduct(r))
+      .filter((p) => p.id && p.name);
+    return { recommendations: products };
+  } catch (e) {
+    if (isNetworkError(e)) return { recommendations: [] };
+    throw e;
+  }
+}
+
 export async function fetchCategories(): Promise<{ categories: string[] }> {
   try {
     const res = await fetch(`${API}/categories`);

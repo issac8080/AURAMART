@@ -24,7 +24,7 @@ def _get_recommendations_from_data_store(
     category: Optional[str] = None,
     exclude_product_ids: Optional[List[str]] = None,
 ) -> List[dict]:
-    """Fast path: recommendations from JSON products only (no Chroma/RAG). Same response shape as get_recommendations."""
+    """Fast path: recommendations from DB only (data_store loads from recommend DB). Same response shape as get_recommendations."""
     exclude = set(exclude_product_ids or [])
     products = get_products(category=category, max_price=max_price, limit=max(limit * 3, 20))
     out = []
@@ -61,13 +61,35 @@ def get_recommendations(
     if cached is not None:
         return cached
 
-    # Fast path: no RAG/Chroma (instant, no heavy deps)
+    # Fast path: no RAG/Chroma (instant, no heavy deps) — uses DB only via get_products
     if USE_FAST_RECOMMEND:
         out = _get_recommendations_from_data_store(
             session_id, limit=limit, max_price=max_price, category=category, exclude_product_ids=exclude_product_ids
         )
         cache_recommendations(session_id, context_key, out, user_id)
         return out
+
+    result: List[dict] = []
+    # Prefer DB-backed engine (category) so "Recommended for You" uses DB-only selection when possible
+    actor_id = user_id or session_id
+    try:
+        from recommend.recommendation_engine import recommend_by_category
+        engine_recs = recommend_by_category(user_id=actor_id, limit=limit + len(exclude))
+        for p in engine_recs:
+            pid = p.get("id")
+            if not pid or pid in exclude or len(result) >= limit:
+                continue
+            if max_price is not None and (p.get("price") or 0) > max_price:
+                continue
+            if category and p.get("category") != category:
+                continue
+            result.append({
+                "product_id": pid,
+                "reason": f"Based on your taste · {p.get('category', '')}",
+                "confidence": 0.8,
+            })
+    except Exception:
+        pass
 
     # Build query for RAG from category / max_price / session context (user context when logged in)
     ctx = get_session_context(session_id, user_id)
@@ -84,43 +106,45 @@ def get_recommendations(
         parts.append("recommend products")
     query = " ".join(parts)
 
-    result: List[dict] = []
-    try:
-        from recommend.rag_products import recommend_products_rag
-        recs = recommend_products_rag(
-            query=query,
-            top_semantic=15,
-            top_rerank=limit + len(exclude),
-            user_preference=f"under ₹{max_price}" if max_price else None,
-        )
-        valid_ids = set()
-        for r in recs:
-            pid = r.get("product_id") or (r.get("metadata") or {}).get("product_id")
-            if not pid or pid in exclude or pid in valid_ids:
-                continue
-            if max_price is not None:
-                price = (r.get("metadata") or {}).get("price")
-                if price is not None and price > max_price:
+    # Skip RAG if we already have enough from DB engine; RAG uses Chroma (built from DB at startup)
+    valid_ids = {r["product_id"] for r in result}
+    if len(result) < limit:
+        try:
+            from recommend.rag_products import recommend_products_rag
+            recs = recommend_products_rag(
+                query=query,
+                top_semantic=15,
+                top_rerank=limit + len(exclude),
+                user_preference=f"under ₹{max_price}" if max_price else None,
+            )
+            for r in recs:
+                pid = r.get("product_id") or (r.get("metadata") or {}).get("product_id")
+                if not pid or pid in exclude or pid in valid_ids:
                     continue
-            if category and (r.get("metadata") or {}).get("category") != category:
-                continue
-            valid_ids.add(pid)
-            reason = r.get("reason") or (r.get("metadata") or {}).get("name") or "Recommended for you"
-            result.append({
-                "product_id": pid,
-                "reason": reason[:200],
-                "confidence": float(r.get("score", 0.8)),
-            })
-            if len(result) >= limit:
-                break
-    except Exception:
-        pass
+                if max_price is not None:
+                    price = (r.get("metadata") or {}).get("price")
+                    if price is not None and price > max_price:
+                        continue
+                if category and (r.get("metadata") or {}).get("category") != category:
+                    continue
+                valid_ids.add(pid)
+                reason = r.get("reason") or (r.get("metadata") or {}).get("name") or "Recommended for you"
+                result.append({
+                    "product_id": pid,
+                    "reason": reason[:200],
+                    "confidence": float(r.get("score", 0.8)),
+                })
+                if len(result) >= limit:
+                    break
+        except Exception:
+            pass
 
-    # Fallback: recommend engine by category (session_id as user_id)
+    # Fallback: recommend engine by category (DB only; use user_id when logged in)
     if not result:
         try:
             from recommend.recommendation_engine import recommend_by_category
-            fallback = recommend_by_category(user_id=session_id, limit=limit + len(exclude))
+            actor_id = user_id or session_id
+            fallback = recommend_by_category(user_id=actor_id, limit=limit + len(exclude))
             for p in fallback:
                 pid = p.get("id")
                 if not pid or pid in exclude:
@@ -148,7 +172,7 @@ def get_recommendations(
         cache_recommendations(session_id, context_key, out, user_id)
         return out
 
-    # Attach full product from app data_store for frontend (same as ai_service)
+    # Attach full product from DB only (data_store loads from recommend DB)
     out = []
     for r in result:
         prod = get_product(r["product_id"])

@@ -19,7 +19,7 @@ def _get_faq_collection():
     try:
         import chromadb
         from chromadb.config import Settings, DEFAULT_TENANT, DEFAULT_DATABASE
-        from chromadb.utils import embedding_functions
+        from recommend.rag_products import get_shared_embedding_function
         persist_dir = str(Path(__file__).resolve().parent.parent / "data" / "chroma_faq")
         Path(persist_dir).mkdir(parents=True, exist_ok=True)
         _CHROMA_FAQ_CLIENT = chromadb.PersistentClient(
@@ -28,10 +28,9 @@ def _get_faq_collection():
             tenant=DEFAULT_TENANT,
             database=DEFAULT_DATABASE,
         )
-        ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
         _FAQ_COLLECTION = _CHROMA_FAQ_CLIENT.get_or_create_collection(
             name="faq",
-            embedding_function=ef,
+            embedding_function=get_shared_embedding_function(),
             metadata={"hnsw:space": "cosine"},
         )
         return _FAQ_COLLECTION

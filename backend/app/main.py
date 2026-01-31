@@ -108,13 +108,22 @@ def _warmup_embeddings():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # DB first (sync products/orders/carts from JSON if empty), then load products from DB
+    try:
+        from app.db_sync import init_recommend_db_and_sync_products
+        init_recommend_db_and_sync_products()
+    except Exception:
+        pass
     try:
         load_products()
     except Exception:
         pass
+    # Rebuild Chroma product index from DB so "Recommended for You" (RAG) uses DB-only data
     try:
-        from app.db_sync import init_recommend_db_and_sync_products
-        init_recommend_db_and_sync_products()
+        from recommend.rag_products import build_product_index
+        n = build_product_index(limit=15000)
+        if n:
+            print(f"RAG: indexed {n} products from DB into Chroma")
     except Exception:
         pass
     try:

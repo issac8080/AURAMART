@@ -80,10 +80,10 @@ export function ProductCard({
           <p className="text-muted-foreground text-xs mt-0.5 truncate">{product.category}</p>
           <div className="flex items-center gap-1.5 mt-2">
             <Star className="h-4 w-4 fill-amber-400 text-amber-400 shrink-0" />
-            <span className="text-xs font-semibold">{product.rating}</span>
-            <span className="text-xs text-muted-foreground">({product.review_count})</span>
+            <span className="text-xs font-semibold">{Number.isFinite(product.rating) ? product.rating : 0}</span>
+            <span className="text-xs text-muted-foreground">({Number.isFinite(product.review_count) ? product.review_count : 0})</span>
           </div>
-          <p className="font-bold text-primary text-lg mt-2">{formatPrice(product.price)}</p>
+          <p className="font-bold text-primary text-lg mt-2">{formatPrice(Number.isFinite(product.price) ? product.price : 0)}</p>
         </CardContent>
         <CardFooter className="p-3.5 sm:p-4 pt-0">
           <Button

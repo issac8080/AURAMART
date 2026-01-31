@@ -31,6 +31,7 @@ import { useCart, useAuth } from "@/app/providers";
 import {
   fetchProducts,
   fetchRecommendations,
+  fetchRecommendationsByEngine,
   fetchCategories,
   fetchUserOrders,
   playCouponGame,
@@ -39,6 +40,7 @@ import {
   trackEvent,
   type Product,
   type Order,
+  type EngineRecType,
 } from "@/lib/api";
 import { getHeroBackground } from "@/lib/unsplash";
 import { formatPrice } from "@/lib/utils";
@@ -56,6 +58,15 @@ const FALLBACK_CATEGORIES = [
   "Beauty",
   "Sports",
   "Automotive",
+];
+
+/** Engine rec types to show on home with display titles. */
+const ENGINE_REC_SECTIONS: { type: EngineRecType; title: string }[] = [
+  { type: "category", title: "Based on your taste" },
+  { type: "festival", title: "Festival picks" },
+  { type: "habits", title: "You might reorder" },
+  { type: "already_bought", title: "You might also like" },
+  { type: "search_no_buy", title: "Based on your searches" },
 ];
 
 function getCategoryIcon(category: string): LucideIcon {
@@ -79,6 +90,7 @@ export default function HomePage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [categoryProducts, setCategoryProducts] = useState<Record<string, Product[]>>({});
   const [orders, setOrders] = useState<Order[]>([]);
+  const [engineRecs, setEngineRecs] = useState<Record<string, Product[]>>({});
   const [loading, setLoading] = useState(true);
   const [gameResult, setGameResult] = useState<{
     played: boolean;
@@ -155,6 +167,23 @@ export default function HomePage() {
         })
       );
       setCategoryProducts(byCat);
+      // Engine recs by type (category, festival, habits, already_bought, search_no_buy)
+      if (actorId) {
+        const engineTypes = ENGINE_REC_SECTIONS.map((s) => s.type);
+        const engineResults = await Promise.allSettled(
+          engineTypes.map((type) => fetchRecommendationsByEngine(actorId, type, 8))
+        );
+        const next: Record<string, Product[]> = {};
+        engineResults.forEach((result, i) => {
+          const type = engineTypes[i];
+          if (result.status === "fulfilled" && result.value.recommendations?.length) {
+            next[type] = result.value.recommendations;
+          }
+        });
+        setEngineRecs(next);
+      } else {
+        setEngineRecs({});
+      }
     } catch {
       try {
         const { products } = await fetchProducts({ limit: 20 });
@@ -169,6 +198,7 @@ export default function HomePage() {
         setPremium([]);
         setOrders([]);
       }
+      setEngineRecs({});
     } finally {
       setLoading(false);
     }
@@ -424,6 +454,21 @@ export default function HomePage() {
               onProductClick={handleProductClick}
             />
           </div>
+
+          {/* Engine recs by type: category, festival, habits, already_bought, search_no_buy */}
+          {ENGINE_REC_SECTIONS.map(
+            ({ type, title }) =>
+              engineRecs[type]?.length > 0 && (
+                <ProductCarousel
+                  key={type}
+                  title={title}
+                  products={engineRecs[type]}
+                  sessionId={sessionId}
+                  onAddToCart={handleAddToCart}
+                  onProductClick={handleProductClick}
+                />
+              )
+          )}
 
           {/* Games – Play & Win: Spin Wheel, Jackpot, Lucky Scratch */}
           <motion.section

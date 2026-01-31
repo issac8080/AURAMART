@@ -1,72 +1,58 @@
 """
 Order management and QR code generation for store pickup.
-Orders are persisted to data/orders.json so they survive server restarts.
+Orders are read/written from recommend DB only. JSON data is synced into DB on startup (db_sync).
 """
-import json
 import uuid
 import hashlib
-from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import List, Optional
 from app.models import Order, OrderStatus, OrderItem, DeliveryMethod, UserProfile
 
-ORDERS_PATH = Path(__file__).resolve().parent.parent / "data" / "orders.json"
-
-# In-memory storage (loaded from file on first access)
-_orders: Dict[str, Order] = {}
-_user_profiles: Dict[str, UserProfile] = {}
-_orders_loaded = False
+# In-memory user profiles (no profile table in recommend DB; User has name/email/phone only)
+_user_profiles: dict = {}
 
 
-def _load_orders() -> None:
-    global _orders, _orders_loaded
-    if _orders_loaded:
-        return
-    _orders_loaded = True
-    if not ORDERS_PATH.exists():
-        return
+def _db_order_to_app(db_order, db_items) -> Order:
+    """Map recommend DB Order + OrderItems to app Order."""
+    status_val = (db_order.status or "pending").lower()
     try:
-        with open(ORDERS_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        for o in data.get("orders", []):
-            order = Order(**o)
-            _orders[order.id] = order
-    except Exception:
-        pass
-
-
-def _save_orders() -> None:
-    ORDERS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        status = OrderStatus(status_val)
+    except ValueError:
+        status = OrderStatus.PENDING
+    dm_val = (db_order.delivery_method or "home_delivery").lower()
     try:
-        with open(ORDERS_PATH, "w", encoding="utf-8") as f:
-            json.dump(
-                {"orders": [o.model_dump() for o in _orders.values()]},
-                f,
-                indent=2,
-                default=str,
-            )
-    except Exception:
-        pass
+        dm = DeliveryMethod(dm_val)
+    except ValueError:
+        dm = DeliveryMethod.HOME_DELIVERY
+    items = [
+        OrderItem(product_id=it.product_id, quantity=int(it.quantity or 1), price=float(it.price or 0))
+        for it in db_items
+    ]
+    created = db_order.created_at.isoformat() if hasattr(db_order.created_at, "isoformat") else str(db_order.created_at or "")
+    updated = db_order.updated_at.isoformat() if hasattr(db_order.updated_at, "isoformat") else str(db_order.updated_at or "")
+    return Order(
+        id=db_order.id,
+        user_id=db_order.user_id,
+        items=items,
+        total=float(db_order.total or 0),
+        delivery_method=dm,
+        status=status,
+        delivery_address=db_order.delivery_address,
+        store_location=db_order.store_location,
+        qr_code=db_order.qr_code,
+        created_at=created,
+        updated_at=updated,
+    )
 
 
 def generate_qr_code_data(order_id: str, total: float, store_location: str = "") -> str:
     """
     Generate QR code data for store pickup.
-    
     Format: ORDER_ID|CHECKSUM|TOTAL|STORE
-    - ORDER_ID: Human-readable order ID (staff can type if scanner fails)
-    - CHECKSUM: 8-char security hash to prevent fraud
-    - TOTAL: Order total for quick verification
-    - STORE: Store location identifier
-    
-    This format works offline - staff can see order details immediately.
     """
-    # Create checksum using order_id + total + secret key
-    secret_key = "AURASHOP_SECRET_2026"  # In production, use env variable
+    secret_key = "AURASHOP_SECRET_2026"
     checksum_input = f"{order_id}{total}{secret_key}"
     checksum = hashlib.sha256(checksum_input.encode()).hexdigest()[:8].upper()
-    
-    # Format: ORD-ABC12345|A1B2C3D4|99.99|store_1
     store_code = store_location.split()[-1] if store_location else "STORE"
     return f"{order_id}|{checksum}|{total:.2f}|{store_code}"
 
@@ -78,16 +64,56 @@ def create_order(
     delivery_address: Optional[str] = None,
     store_location: Optional[str] = None,
 ) -> Order:
-    """Create a new order."""
-    _load_orders()
+    """Create a new order in recommend DB only."""
     order_id = f"ORD-{uuid.uuid4().hex[:8].upper()}"
     total = sum(item.price * item.quantity for item in items)
-    now = datetime.utcnow().isoformat()
-    
+    now = datetime.utcnow()
     qr_code = None
     if delivery_method == DeliveryMethod.STORE_PICKUP:
         qr_code = generate_qr_code_data(order_id, total, store_location or "")
-    
+
+    try:
+        from recommend.db import get_session
+        from recommend.models_db import User, Order as DbOrder, OrderItem as DbOrderItem
+
+        session = get_session()
+        try:
+            existing_user = session.query(User).filter(User.user_id == user_id).first()
+            if not existing_user:
+                session.add(
+                    User(user_id=user_id, name=None, email=None, phone=None, created_at=now)
+                )
+                session.flush()
+            db_order = DbOrder(
+                id=order_id,
+                user_id=user_id,
+                total=total,
+                delivery_method=delivery_method.value if hasattr(delivery_method, "value") else str(delivery_method),
+                status=OrderStatus.PENDING.value,
+                delivery_address=delivery_address,
+                store_location=store_location,
+                qr_code=qr_code,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(db_order)
+            session.flush()
+            for it in items:
+                session.add(
+                    DbOrderItem(
+                        order_id=order_id,
+                        product_id=it.product_id,
+                        quantity=int(it.quantity),
+                        price=float(it.price),
+                    )
+                )
+            session.commit()
+        finally:
+            session.close()
+    except Exception as e:
+        print(f"order_service: create_order failed {e}")
+        raise
+
     order = Order(
         id=order_id,
         user_id=user_id,
@@ -98,13 +124,10 @@ def create_order(
         delivery_address=delivery_address,
         store_location=store_location,
         qr_code=qr_code,
-        created_at=now,
-        updated_at=now,
+        created_at=now.isoformat(),
+        updated_at=now.isoformat(),
     )
-    _orders[order_id] = order
-    _save_orders()
-    
-    # Add pending AuraPoints immediately
+
     try:
         from app.wallet_service import add_pending_points
         add_pending_points(user_id, order_id, total)
@@ -112,53 +135,84 @@ def create_order(
     except Exception as e:
         print(f"Failed to add pending points for order {order_id}: {e}")
 
-    # Sync order to recommend DB so RAG/habits see it
-    try:
-        from app.db_sync import sync_order_to_recommend_db
-        if sync_order_to_recommend_db(order):
-            print(f"✓ Synced order {order_id} to recommend DB")
-    except Exception as e:
-        print(f"Failed to sync order to recommend DB: {e}")
-
     return order
 
 
 def get_order(order_id: str) -> Optional[Order]:
-    """Get order by ID."""
-    _load_orders()
-    return _orders.get(order_id)
+    """Get order by ID from recommend DB."""
+    try:
+        from recommend.db import get_session
+        from recommend.models_db import Order as DbOrder, OrderItem as DbOrderItem
+
+        session = get_session()
+        try:
+            db_order = session.query(DbOrder).filter(DbOrder.id == order_id).first()
+            if not db_order:
+                return None
+            db_items = session.query(DbOrderItem).filter(DbOrderItem.order_id == order_id).all()
+            return _db_order_to_app(db_order, db_items)
+        finally:
+            session.close()
+    except Exception:
+        return None
 
 
 def get_user_orders(user_id: str) -> List[Order]:
-    """Get all orders for a user, newest first."""
-    _load_orders()
-    user_orders = [o for o in _orders.values() if o.user_id == user_id]
-    return sorted(user_orders, key=lambda o: o.created_at or "", reverse=True)
+    """Get all orders for a user from recommend DB, newest first."""
+    try:
+        from recommend.db import get_session
+        from recommend.models_db import Order as DbOrder, OrderItem as DbOrderItem
+
+        session = get_session()
+        try:
+            db_orders = (
+                session.query(DbOrder)
+                .filter(DbOrder.user_id == user_id)
+                .order_by(DbOrder.created_at.desc())
+                .all()
+            )
+            out = []
+            for db_order in db_orders:
+                db_items = session.query(DbOrderItem).filter(DbOrderItem.order_id == db_order.id).all()
+                out.append(_db_order_to_app(db_order, db_items))
+            return out
+        finally:
+            session.close()
+    except Exception:
+        return []
 
 
 def update_order_status(order_id: str, status: OrderStatus) -> Optional[Order]:
-    """Update order status and trigger cashback if completed."""
-    _load_orders()
-    order = _orders.get(order_id)
-    if order:
-        old_status = order.status
-        order.status = status
-        order.updated_at = datetime.utcnow().isoformat()
-        _orders[order_id] = order
-        _save_orders()
-        
-        # Activate pending AuraPoints when order is completed
-        if status in [OrderStatus.DELIVERED, OrderStatus.PICKED_UP] and old_status != status:
-            try:
-                from app.wallet_service import activate_pending_points
-                result = activate_pending_points(order_id)
-                if result:
-                    print(f"✓ Activated AuraPoints for order {order_id}")
-                else:
-                    print(f"No pending points found for order {order_id}")
-            except Exception as e:
-                print(f"Failed to activate points for order {order_id}: {e}")
-    return order
+    """Update order status in recommend DB and trigger cashback if completed."""
+    try:
+        from recommend.db import get_session
+        from recommend.models_db import Order as DbOrder, OrderItem as DbOrderItem
+
+        session = get_session()
+        try:
+            db_order = session.query(DbOrder).filter(DbOrder.id == order_id).first()
+            if not db_order:
+                return None
+            old_status_val = (db_order.status or "").lower()
+            db_order.status = status.value if hasattr(status, "value") else str(status)
+            db_order.updated_at = datetime.utcnow()
+            session.commit()
+            db_items = session.query(DbOrderItem).filter(DbOrderItem.order_id == order_id).all()
+            order = _db_order_to_app(db_order, db_items)
+            completed_vals = ("delivered", "picked_up")
+            if status in [OrderStatus.DELIVERED, OrderStatus.PICKED_UP] and old_status_val not in completed_vals:
+                try:
+                    from app.wallet_service import activate_pending_points
+                    result = activate_pending_points(order_id)
+                    if result:
+                        print(f"✓ Activated AuraPoints for order {order_id}")
+                except Exception as e:
+                    print(f"Failed to activate points for order {order_id}: {e}")
+            return order
+        finally:
+            session.close()
+    except Exception:
+        return None
 
 
 def verify_qr_checksum(order_id: str, checksum: str, total: float) -> bool:
@@ -169,16 +223,7 @@ def verify_qr_checksum(order_id: str, checksum: str, total: float) -> bool:
 
 
 def verify_pickup_qr(qr_code: str) -> Optional[Order]:
-    """
-    Verify QR code and return order if valid.
-    
-    Supports two formats:
-    1. New format: ORDER_ID|CHECKSUM|TOTAL|STORE (offline-capable)
-    2. Old format: AURASHOP-PICKUP-HASH (backward compatibility)
-    """
-    _load_orders()
-    
-    # Try new format first: ORD-ABC12345|A1B2C3D4|99.99|store_1
+    """Verify QR code and return order if valid. Reads from recommend DB."""
     if "|" in qr_code:
         parts = qr_code.split("|")
         if len(parts) >= 3:
@@ -188,21 +233,30 @@ def verify_pickup_qr(qr_code: str) -> Optional[Order]:
                 total = float(parts[2])
             except ValueError:
                 return None
-            
-            # Find order by ID
-            order = _orders.get(order_id)
+            order = get_order(order_id)
             if order and order.delivery_method == DeliveryMethod.STORE_PICKUP:
-                # Verify checksum
                 if verify_qr_checksum(order_id, checksum, total):
                     return order
             return None
-    
-    # Fall back to old format for backward compatibility
-    for order in _orders.values():
-        if order.qr_code == qr_code and order.delivery_method == DeliveryMethod.STORE_PICKUP:
-            return order
-    
-    return None
+    # Fallback: match qr_code string
+    try:
+        from recommend.db import get_session
+        from recommend.models_db import Order as DbOrder, OrderItem as DbOrderItem
+
+        session = get_session()
+        try:
+            db_order = session.query(DbOrder).filter(
+                DbOrder.qr_code == qr_code,
+                DbOrder.delivery_method == "store_pickup",
+            ).first()
+            if not db_order:
+                return None
+            db_items = session.query(DbOrderItem).filter(DbOrderItem.order_id == db_order.id).all()
+            return _db_order_to_app(db_order, db_items)
+        finally:
+            session.close()
+    except Exception:
+        return None
 
 
 def complete_pickup(order_id: str) -> Optional[Order]:
@@ -211,7 +265,7 @@ def complete_pickup(order_id: str) -> Optional[Order]:
 
 
 def get_user_profile(user_id: str) -> Optional[UserProfile]:
-    """Get user profile."""
+    """Get user profile (in-memory; recommend DB User has name/email/phone only)."""
     return _user_profiles.get(user_id)
 
 
@@ -223,9 +277,8 @@ def create_or_update_profile(
     addresses: Optional[List[str]] = None,
     preferred_stores: Optional[List[str]] = None,
 ) -> UserProfile:
-    """Create or update user profile."""
+    """Create or update user profile (in-memory)."""
     existing = _user_profiles.get(user_id)
-    
     if existing:
         if name is not None:
             existing.name = name
@@ -238,21 +291,19 @@ def create_or_update_profile(
         if preferred_stores is not None:
             existing.preferred_stores = preferred_stores
         return existing
-    else:
-        profile = UserProfile(
-            user_id=user_id,
-            name=name,
-            email=email,
-            phone=phone,
-            addresses=addresses or [],
-            preferred_stores=preferred_stores or [],
-            created_at=datetime.utcnow().isoformat(),
-        )
-        _user_profiles[user_id] = profile
-        return profile
+    profile = UserProfile(
+        user_id=user_id,
+        name=name,
+        email=email,
+        phone=phone,
+        addresses=addresses or [],
+        preferred_stores=preferred_stores or [],
+        created_at=datetime.utcnow().isoformat(),
+    )
+    _user_profiles[user_id] = profile
+    return profile
 
 
-# Demo stores
 AVAILABLE_STORES = [
     {"id": "store_1", "name": "AuraShop Downtown", "address": "123 Main St, City Center"},
     {"id": "store_2", "name": "AuraShop Mall", "address": "456 Shopping Mall, North District"},

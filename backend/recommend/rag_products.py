@@ -10,17 +10,21 @@ from typing import List, Optional
 from recommend.db import get_session
 from recommend.models_db import Product
 
-# Chroma and embeddings
+# Single embedding model ID and singleton so weights load once (no double load)
+EMBEDDING_MODEL_ID = "all-MiniLM-L6-v2"
+
 _CHROMA_CLIENT = None
 _PRODUCT_COLLECTION = None
 _EMBEDDING_MODEL = None
+_EMBEDDING_POSITION_ID = "__shared_sentence_transformer__"  # stable id for embedding position / reuse
+
 
 def _get_embedding_model():
     global _EMBEDDING_MODEL
     if _EMBEDDING_MODEL is None:
         try:
             from sentence_transformers import SentenceTransformer
-            _EMBEDDING_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+            _EMBEDDING_MODEL = SentenceTransformer(EMBEDDING_MODEL_ID)
         except Exception:
             _EMBEDDING_MODEL = False  # mark as failed
     return _EMBEDDING_MODEL if _EMBEDDING_MODEL else None
@@ -38,14 +42,42 @@ def _embed_fn(texts: List[str]) -> List[List[float]]:
     return model.encode(texts, convert_to_numpy=True).tolist()
 
 
+class _SharedChromaEmbeddingFunction:
+    """Chroma embedding function that uses the single shared SentenceTransformer (avoids loading weights twice)."""
+    def __call__(self, input: List[str]) -> List[List[float]]:
+        return _embed_fn(input)
+
+    def name(self) -> str:
+        """Chroma expects embedding_function.name() for config/serialization."""
+        return "sentence_transformer"
+
+    def default_space(self):
+        """Chroma expects default_space() for collection config."""
+        return "cosine"
+
+    def supported_spaces(self) -> List[str]:
+        """Chroma may check supported spaces."""
+        return ["cosine", "l2", "ip"]
+
+
+# One instance for all Chroma collections (products, FAQ) so embedding position id is shared
+_SHARED_CHROMA_EMBEDDING_FN = _SharedChromaEmbeddingFunction()
+
+
+def get_shared_embedding_function():
+    """Return the shared embedding function for Chroma (single model load). Use for products and FAQ."""
+    return _SHARED_CHROMA_EMBEDDING_FN
+
+
 def _get_product_collection():
     global _CHROMA_CLIENT, _PRODUCT_COLLECTION
     if _PRODUCT_COLLECTION is not None:
         return _PRODUCT_COLLECTION
+    # Ensure singleton model is loaded before Chroma uses it (single embedding position)
+    _get_embedding_model()
     try:
         import chromadb
         from chromadb.config import Settings, DEFAULT_TENANT, DEFAULT_DATABASE
-        from chromadb.utils import embedding_functions
         persist_dir = str(Path(__file__).resolve().parent.parent / "data" / "chroma_products")
         Path(persist_dir).mkdir(parents=True, exist_ok=True)
         _CHROMA_CLIENT = chromadb.PersistentClient(
@@ -54,11 +86,9 @@ def _get_product_collection():
             tenant=DEFAULT_TENANT,
             database=DEFAULT_DATABASE,
         )
-        # Use Chroma's built-in SentenceTransformer (has .name etc.; same model we used)
-        ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
         _PRODUCT_COLLECTION = _CHROMA_CLIENT.get_or_create_collection(
             name="products",
-            embedding_function=ef,
+            embedding_function=_SHARED_CHROMA_EMBEDDING_FN,
             metadata={"hnsw:space": "cosine"},
         )
         return _PRODUCT_COLLECTION

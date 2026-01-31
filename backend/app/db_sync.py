@@ -139,6 +139,8 @@ def init_recommend_db_and_sync_products() -> bool:
                             print(f"db_sync: loaded {inserted} products from JSON into recommend DB")
             # Sync existing orders from JSON so RAG/habits see them (if orders table empty)
             _sync_orders_json_to_db(session)
+            # Sync carts from JSON into DB if carts table is empty
+            _sync_carts_json_to_db(session)
             # Sync FAQ from JSON so RAG FAQ search has data (if faq table empty)
             _sync_faq_json_to_db(session)
             return True
@@ -210,6 +212,49 @@ def _sync_orders_json_to_db(session) -> None:
         print(f"db_sync: loaded {len(orders_list)} orders from JSON into recommend DB")
     except Exception as e:
         print(f"db_sync: sync orders from JSON failed: {e}")
+
+
+def _sync_carts_json_to_db(session) -> None:
+    """If carts table is empty, load carts from data/carts.json into recommend DB."""
+    try:
+        from recommend.models_db import Cart as DbCart
+
+        if session.query(DbCart).count() > 0:
+            return
+        carts_path = Path(__file__).resolve().parent.parent / "data" / "carts.json"
+        if not carts_path.exists():
+            return
+        import json
+        with open(carts_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        carts = data.get("carts") or {}
+        if not isinstance(carts, dict):
+            return
+        inserted = 0
+        for key, product_ids in carts.items():
+            if not isinstance(product_ids, list):
+                continue
+            # Heuristic: sess_ prefix = session_id, else user_id
+            is_session = key.startswith("sess_") if isinstance(key, str) else False
+            uid = None if is_session else key
+            sid = key if is_session else None
+            for pid in product_ids:
+                if not pid:
+                    continue
+                session.add(
+                    DbCart(
+                        user_id=uid,
+                        session_id=sid,
+                        product_id=str(pid),
+                        quantity=1,
+                    )
+                )
+                inserted += 1
+        if inserted:
+            session.commit()
+            print(f"db_sync: loaded {inserted} cart items from JSON into recommend DB")
+    except Exception as e:
+        print(f"db_sync: sync carts from JSON failed: {e}")
 
 
 def _sync_faq_json_to_db(session) -> None:
