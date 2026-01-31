@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Search } from "lucide-react";
@@ -9,7 +9,7 @@ import { useCart } from "@/app/providers";
 import { fetchProducts, trackEvent } from "@/lib/api";
 import type { Product } from "@/lib/api";
 
-export default function SearchPage() {
+function SearchContent() {
   const searchParams = useSearchParams();
   const query = searchParams?.get("q") || "";
   const { sessionId, refreshCart } = useCart();
@@ -102,5 +102,17 @@ export default function SearchPage() {
         </motion.div>
       )}
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="animate-spin h-10 w-10 border-2 border-indigo-500 border-t-transparent rounded-full" />
+      </div>
+    }>
+      <SearchContent />
+    </Suspense>
   );
 }

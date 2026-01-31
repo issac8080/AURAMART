@@ -108,7 +108,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const sid = getSessionId();
     setSessionId(sid);
-    const sid = getSessionId();
     if (!sid) return;
     getCart(sid)
       .then(({ cart }) => {

@@ -257,8 +257,6 @@ export default function CheckoutPage() {
       } catch (e) {
         console.error("Failed to clear cart:", e);
       }
-      }
-      const order = await res.json();
       clearCartAndRedirect(order.id);
     } catch (err) {
       alert("Failed to place order. Please try again.");

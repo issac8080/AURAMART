@@ -297,7 +297,9 @@ export async function chatStream(
   }
 }
 
-export async function getCart(sessionId: string, userId?: string): Promise<{ cart: Product[] }> {
+export type CartItem = Product & { quantity: number };
+
+export async function getCart(sessionId: string, userId?: string): Promise<{ cart: CartItem[] }> {
   try {
     const url = userId ? `${API}/session/${sessionId}/cart?user_id=${encodeURIComponent(userId)}` : `${API}/session/${sessionId}/cart`;
     const res = await fetch(url);
@@ -307,6 +309,25 @@ export async function getCart(sessionId: string, userId?: string): Promise<{ car
     if (isNetworkError(e)) return { cart: [] };
     throw e;
   }
+}
+
+/** Set quantity for a product in cart. quantity 0 removes. Returns updated cart. */
+export async function updateCartQuantity(
+  sessionId: string,
+  productId: string,
+  quantity: number,
+  userId?: string
+): Promise<{ cart: CartItem[] }> {
+  const url = userId
+    ? `${API}/session/${sessionId}/cart/item?user_id=${encodeURIComponent(userId)}`
+    : `${API}/session/${sessionId}/cart/item`;
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ product_id: productId, quantity }),
+  });
+  if (!res.ok) throw new Error("Failed to update cart");
+  return res.json();
 }
 
 export async function addToCart(sessionId: string, productId: string, userId?: string): Promise<void> {
@@ -359,24 +380,6 @@ export async function removeFromCart(sessionId: string, productId: string): Prom
     session_id: sessionId,
     product_id: productId,
   });
-}
-
-/** Cart item with quantity (from GET /cart). */
-export type CartItem = Product & { quantity: number };
-
-/** Set quantity for a product in cart. quantity 0 removes the item. Returns updated cart. */
-export async function updateCartQuantity(
-  sessionId: string,
-  productId: string,
-  quantity: number
-): Promise<{ cart: CartItem[] }> {
-  const res = await fetch(`${API}/session/${sessionId}/cart/item`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ product_id: productId, quantity }),
-  });
-  if (!res.ok) throw new Error("Failed to update cart");
-  return res.json();
 }
 
 export type Order = {

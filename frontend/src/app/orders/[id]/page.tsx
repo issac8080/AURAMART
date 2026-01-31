@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Package, Store, Home, Check, Clock, Truck, ArrowLeft, X, Gift, Sparkles, RefreshCw, CheckCheck, Info } from "lucide-react";
+import { Package, Store, Home, Check, Clock, Truck, ArrowLeft, X, Gift, Sparkles, CheckCheck, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +38,7 @@ const statusConfig: Record<string, { label: string; icon: any; color: string }> 
   cancelled: { label: "Cancelled", icon: Clock, color: "bg-red-500/15 text-red-700" },
 };
 
-export default function OrderDetailPage() {
+function OrderDetailContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -110,7 +110,7 @@ export default function OrderDetailPage() {
   };
 
   const handleMarkDelivered = async () => {
-    if (!confirm("Mark this order as delivered? (Demo purpose)\n\nThis will:\n✓ Change status to 'delivered'\n✓ Enable Return/Exchange option\n✓ Credit AuraPoints to wallet")) return;
+    if (!confirm("Mark this order as delivered? (Demo purpose)\n\nThis will:\n✓ Change status to 'delivered'\n✓ Credit AuraPoints to wallet")) return;
     setMarkingDelivered(true);
     try {
       const res = await fetch(`${API}/orders/${orderId}/status`, {
@@ -134,7 +134,7 @@ export default function OrderDetailPage() {
           }
         } catch {}
         
-        alert("✓ Order marked as delivered!\n✓ AuraPoints will be credited\n✓ Return option now available");
+        alert("✓ Order marked as delivered!\n✓ AuraPoints will be credited");
       } else {
         alert("Failed to update order status");
       }
@@ -203,11 +203,6 @@ export default function OrderDetailPage() {
                 <p>✓ Earn up to 5% AuraPoints when order is delivered</p>
                 <p>✓ Points credited automatically to your wallet</p>
                 <p>✓ Valid for 30 days from delivery</p>
-                {(order.status === "delivered" || order.status === "picked_up") && (
-                  <p className="font-medium text-emerald-600 dark:text-emerald-400 mt-2">
-                    ✓ If you return this order, AuraPoints will be deducted from your wallet
-                  </p>
-                )}
               </div>
             </div>
           </div>
@@ -383,19 +378,6 @@ export default function OrderDetailPage() {
                   </Button>
                 )}
                 
-                {/* Return / Exchange Button */}
-                {(order.status === "delivered" || order.status === "picked_up") && (
-                  <Link href={`/returns/create?orderId=${order.id}`}>
-                    <Button
-                      variant="outline"
-                      className="w-full border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Return / Exchange
-                    </Button>
-                  </Link>
-                )}
-                
                 {/* Cancel Order Button */}
                 {order.status !== "cancelled" && order.status !== "delivered" && order.status !== "picked_up" && (
                   <Button
@@ -425,5 +407,17 @@ export default function OrderDetailPage() {
       )}
     </AnimatePresence>
     </>
+  );
+}
+
+export default function OrderDetailPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="animate-spin h-10 w-10 border-2 border-indigo-500 border-t-transparent rounded-full" />
+      </div>
+    }>
+      <OrderDetailContent />
+    </Suspense>
   );
 }

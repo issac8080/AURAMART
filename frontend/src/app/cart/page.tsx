@@ -95,7 +95,6 @@ export default function CartPage() {
       setUpdatingId(null);
     }
   };
-  };
 
   const handleAddToCart = (productId: string) => {
     trackEvent({

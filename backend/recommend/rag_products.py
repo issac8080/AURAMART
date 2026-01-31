@@ -337,7 +337,3 @@ def recommend_products_rag(
     """
     candidates = hybrid_search(query, top_k_semantic=top_semantic, top_k_keyword=10)
     return rerank_with_llm(query, candidates, top_n=top_rerank, user_preference=user_preference)
-
-
-# Eager-init shared embedding model on first import so it is not loaded on every embed call
-init_embeddings()

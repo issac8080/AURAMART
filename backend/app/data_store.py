@@ -7,11 +7,6 @@ from datetime import datetime
 from app.models import EventPayload, Product, EventType
 
 # Products: loaded from recommend DB (cached in memory)
-from pathlib import Path
-
-# Load synthetic products and carts paths
-PRODUCTS_PATH = Path(__file__).resolve().parent.parent / "data" / "products.json"
-CARTS_PATH = Path(__file__).resolve().parent.parent / "data" / "carts.json"
 _products: List[Product] = []
 _products_by_id: Dict[str, Product] = {}
 _products_loaded = False
@@ -22,38 +17,6 @@ _events: Dict[str, List[dict]] = {}
 # User preference profiles (derived from events): session_id -> profile
 _profiles: Dict[str, dict] = {}
 
-# Cart per session: session_id -> list of {product_id, quantity} (persisted to disk)
-_carts: Dict[str, List[dict]] = {}
-_carts_loaded = False
-
-
-def _load_carts() -> None:
-    """Load carts from disk so they survive server restarts."""
-    global _carts, _carts_loaded
-    if _carts_loaded:
-        return
-    _carts_loaded = True
-    if not CARTS_PATH.exists():
-        return
-    try:
-        import json
-        with open(CARTS_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, dict):
-            _carts = {k: v if isinstance(v, list) else [] for k, v in data.items()}
-    except Exception:
-        pass
-
-
-def _save_carts() -> None:
-    """Persist carts to disk."""
-    try:
-        import json
-        CARTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(CARTS_PATH, "w", encoding="utf-8") as f:
-            json.dump(_carts, f, indent=2)
-    except Exception:
-        pass
 # Recommendation cache: (session_id, context_hash) -> list of recs (optional TTL)
 _rec_cache: Dict[str, List[dict]] = {}
 _CACHE_MAX = 500
@@ -174,23 +137,8 @@ def _cart_query(session, session_id: str, user_id: Optional[str]):
     return session.query(DbCart).filter(DbCart.session_id == session_id).all()
 
 
-def _normalize_cart(items: list) -> list:
-    """Convert legacy list of ids or list of {product_id, quantity} to list of dicts."""
-    out: list = []
-    for x in items:
-        if isinstance(x, str):
-            out.append({"product_id": x, "quantity": 1})
-        elif isinstance(x, dict) and "product_id" in x:
-            q = max(1, int(x.get("quantity", 1)))
-            out.append({"product_id": str(x["product_id"]), "quantity": q})
-    return out
-
-
-def get_cart(session_id: str, user_id: Optional[str] = None) -> list:
-    """
-    Return cart as list of dicts {product_id, quantity}.
-    Supports both recommend DB (if available) and legacy file cart.
-    """
+def get_cart(session_id: str, user_id: Optional[str] = None) -> List[str]:
+    """Cart from recommend DB only: list of product_ids (with quantity as repeats)."""
     try:
         from recommend.db import get_session
         from recommend.models_db import Cart as DbCart
@@ -201,24 +149,16 @@ def get_cart(session_id: str, user_id: Optional[str] = None) -> list:
             out = []
             for r in rows:
                 qty = max(1, int(r.quantity) if r.quantity is not None else 1)
-                out.append({"product_id": r.product_id, "quantity": qty})
+                out.extend([r.product_id] * qty)
             return out
         finally:
             session.close()
     except Exception:
-        # fallback to in-memory/file-based cart if DB unavailable
-        if user_id:
-            # for user_id, file-based fallback not available
-            return []
-        _load_carts()
-        raw = _carts.get(session_id, [])
-        return _normalize_cart(raw)
+        return []
 
 
-def add_to_cart(session_id: str, product_id: str, user_id: Optional[str] = None, quantity: int = 1) -> None:
-    """
-    Add one or more items to cart in recommend DB if available, else file-based storage.
-    """
+def add_to_cart(session_id: str, product_id: str, user_id: Optional[str] = None) -> None:
+    """Add one item to cart in recommend DB."""
     try:
         from recommend.db import get_session
         from recommend.models_db import Cart as DbCart
@@ -227,165 +167,26 @@ def add_to_cart(session_id: str, product_id: str, user_id: Optional[str] = None,
         try:
             uid = user_id.strip() if user_id and user_id.strip() else None
             sid = None if uid else session_id
-            filter_args = []
             if uid:
-                filter_args = [DbCart.user_id == uid, DbCart.product_id == product_id]
+                existing = session.query(DbCart).filter(DbCart.user_id == uid, DbCart.product_id == product_id).first()
             else:
-                filter_args = [DbCart.session_id == session_id, DbCart.product_id == product_id]
-            existing = session.query(DbCart).filter(*filter_args).first()
+                existing = session.query(DbCart).filter(DbCart.session_id == session_id, DbCart.product_id == product_id).first()
             if existing:
-                existing.quantity = (existing.quantity or 1) + max(1, quantity)
+                existing.quantity = (existing.quantity or 1) + 1
             else:
                 session.add(
                     DbCart(
                         user_id=uid,
                         session_id=sid,
                         product_id=product_id,
-                        quantity=max(1, quantity),
+                        quantity=1,
                     )
                 )
             session.commit()
         finally:
             session.close()
     except Exception:
-        # fallback to in-memory/file-based cart if DB unavailable
-        if user_id:
-            # for user_id, file-based fallback not available
-            return
-        _load_carts()
-        if session_id not in _carts:
-            _carts[session_id] = []
-        items = _normalize_cart(_carts[session_id])
-        found = False
-        for item in items:
-            if item["product_id"] == product_id:
-                item["quantity"] = item["quantity"] + max(1, quantity)
-                found = True
-                break
-        if not found:
-            items.append({"product_id": product_id, "quantity": max(1, quantity)})
-        _carts[session_id] = items
-        _save_carts()
-
-
-def set_cart_quantity(session_id: str, product_id: str, quantity: int, user_id: Optional[str] = None) -> None:
-    """
-    Set quantity for a product. If quantity <= 0, remove the item.
-    Supports recommend DB and in-memory/file-based fallback.
-    """
-    try:
-        from recommend.db import get_session
-        from recommend.models_db import Cart as DbCart
-
-        session = get_session()
-        try:
-            uid = user_id.strip() if user_id and user_id.strip() else None
-            filter_args = []
-            if uid:
-                filter_args = [DbCart.user_id == uid, DbCart.product_id == product_id]
-            else:
-                filter_args = [DbCart.session_id == session_id, DbCart.product_id == product_id]
-            row = session.query(DbCart).filter(*filter_args).first()
-            if row:
-                if quantity <= 0:
-                    session.delete(row)
-                else:
-                    row.quantity = quantity
-                session.commit()
-            elif quantity > 0:
-                session.add(
-                    DbCart(
-                        user_id=uid,
-                        session_id=None if uid else session_id,
-                        product_id=product_id,
-                        quantity=quantity,
-                    )
-                )
-                session.commit()
-        finally:
-            session.close()
-    except Exception:
-        # fallback to in-memory/file-based cart if DB unavailable
-        if user_id:
-            return
-        _load_carts()
-        if session_id not in _carts:
-            return
-        items = _normalize_cart(_carts[session_id])
-        if quantity <= 0:
-            _carts[session_id] = [x for x in items if x["product_id"] != product_id]
-            _save_carts()
-            return
-        found = False
-        for item in items:
-            if item["product_id"] == product_id:
-                item["quantity"] = quantity
-                found = True
-                break
-        if not found:
-            items.append({"product_id": product_id, "quantity": quantity})
-        _carts[session_id] = items
-        _save_carts()
-
-
-def remove_from_cart(session_id: str, product_id: str, user_id: Optional[str] = None) -> None:
-    """
-    Remove one occurrence of product from cart (decrement quantity or remove), in recommend DB or fallback.
-    """
-    try:
-        from recommend.db import get_session
-        from recommend.models_db import Cart as DbCart
-
-        session = get_session()
-        try:
-            uid = user_id.strip() if user_id and user_id.strip() else None
-            filter_args = []
-            if uid:
-                filter_args = [DbCart.user_id == uid, DbCart.product_id == product_id]
-            else:
-                filter_args = [DbCart.session_id == session_id, DbCart.product_id == product_id]
-            row = session.query(DbCart).filter(*filter_args).first()
-            if row:
-                if (row.quantity or 1) > 1:
-                    row.quantity -= 1
-                else:
-                    session.delete(row)
-                session.commit()
-        finally:
-            session.close()
-    except Exception:
-        # fallback to in-memory/file-based cart if DB unavailable
-        if user_id:
-            return
-        set_cart_quantity(session_id, product_id, 0)
-
-
-def clear_cart(session_id: str, user_id: Optional[str] = None) -> None:
-    """
-    Clear all items from cart in recommend DB if available, else file-based.
-    """
-    try:
-        from recommend.db import get_session
-        from recommend.models_db import Cart as DbCart
-
-        session = get_session()
-        try:
-            uid = user_id.strip() if user_id and user_id.strip() else None
-            if uid:
-                session.query(DbCart).filter(DbCart.user_id == uid).delete()
-            else:
-                session.query(DbCart).filter(DbCart.session_id == session_id).delete()
-            session.commit()
-        finally:
-            session.close()
-    except Exception:
-        # fallback to in-memory/file-based cart if DB unavailable
-        if user_id:
-            return
-        _load_carts()
-        if session_id in _carts:
-            _carts[session_id] = []
-            _save_carts()
+        pass
 
 
 def remove_from_cart(session_id: str, product_id: str, user_id: Optional[str] = None) -> None:
@@ -407,6 +208,46 @@ def remove_from_cart(session_id: str, product_id: str, user_id: Optional[str] = 
                 else:
                     session.delete(row)
                 session.commit()
+        finally:
+            session.close()
+    except Exception:
+        pass
+
+
+def set_cart_item_quantity(
+    session_id: str, product_id: str, quantity: int, user_id: Optional[str] = None
+) -> None:
+    """Set cart item quantity. quantity <= 0 removes the item."""
+    if quantity < 0:
+        quantity = 0
+    try:
+        from recommend.db import get_session
+        from recommend.models_db import Cart as DbCart
+
+        session = get_session()
+        try:
+            uid = user_id.strip() if user_id and user_id.strip() else None
+            sid = None if uid else session_id
+            if uid:
+                row = session.query(DbCart).filter(DbCart.user_id == uid, DbCart.product_id == product_id).first()
+            else:
+                row = session.query(DbCart).filter(DbCart.session_id == session_id, DbCart.product_id == product_id).first()
+            if quantity <= 0:
+                if row:
+                    session.delete(row)
+            else:
+                if row:
+                    row.quantity = quantity
+                else:
+                    session.add(
+                        DbCart(
+                            user_id=uid,
+                            session_id=sid,
+                            product_id=product_id,
+                            quantity=quantity,
+                        )
+                    )
+            session.commit()
         finally:
             session.close()
     except Exception:
@@ -473,8 +314,7 @@ def get_profile(session_id: str, user_id: Optional[str] = None) -> dict:
 def get_session_context(session_id: str, user_id: Optional[str] = None) -> dict:
     """Build context for AI: events, cart, profile, viewed product IDs. Uses user_id when provided (logged-in)."""
     events = get_events(session_id, 80)
-    cart_items = get_cart(session_id, user_id)
-    cart_ids = [item["product_id"] for item in cart_items]
+    cart_ids = get_cart(session_id, user_id)
     profile = get_profile(session_id, user_id)
     viewed_ids = [
         e.get("product_id") for e in events

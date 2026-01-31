@@ -18,7 +18,6 @@ import {
   Trophy,
   Scissors,
   PackageCheck,
-  RotateCcw,
   ChevronRight,
   type LucideIcon,
 } from "lucide-react";
@@ -683,36 +682,6 @@ export default function HomePage() {
                 ))}
               </ul>
             )}
-          </motion.section>
-
-          {/* Returns */}
-          <motion.section
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 shadow-sm"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                  <RotateCcw className="h-6 w-6 text-indigo-500" />
-                </div>
-                <div>
-                  <h2 className="font-heading text-lg font-bold text-gray-900 dark:text-white">
-                    Returns & replacements
-                  </h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Start a return or check our return policy
-                  </p>
-                </div>
-              </div>
-              <Link
-                href="/profile"
-                className="rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-white transition-colors flex items-center gap-1"
-              >
-                Go to orders
-                <ChevronRight className="h-4 w-4" />
-              </Link>
-            </div>
           </motion.section>
         </>
       )}
