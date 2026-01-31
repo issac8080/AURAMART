@@ -107,6 +107,11 @@ export default function ProfilePage() {
   }, [userId, authUser]);
 
   const handleSaveProfile = async () => {
+    const emailTrimmed = email.trim().toLowerCase();
+    if (emailTrimmed && !emailTrimmed.endsWith("@gmail.com")) {
+      alert("Invalid email. Please use a Gmail address (e.g. you@gmail.com).");
+      return;
+    }
     try {
       const res = await fetch(`${API}/users/${userId}/profile`, {
         method: "POST",
@@ -253,7 +258,7 @@ export default function ProfilePage() {
                       <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Email</label>
                       <Input
                         type="email"
-                        placeholder="your@email.com"
+                        placeholder="you@gmail.com"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         className="mt-1.5 rounded-xl border-2 border-gray-200 dark:border-gray-600 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"

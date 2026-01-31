@@ -20,6 +20,8 @@ def send_otp(email: str) -> bool:
     email = (email or "").strip().lower()
     if not email or "@" not in email:
         return False
+    if not email.endswith("@gmail.com"):
+        return False
     otp = _generate_otp()
     expires_at = datetime.utcnow() + timedelta(minutes=OTP_EXPIRY_MINUTES)
     _otp_store[email] = {"otp": otp, "expires_at": expires_at}

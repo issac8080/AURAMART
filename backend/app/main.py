@@ -221,7 +221,10 @@ def chat_stream_endpoint(body: ChatRequest):
 
 @app.post("/auth/send-otp")
 def auth_send_otp_endpoint(body: SendOtpRequest):
-    """Generate OTP for email and print it in the backend terminal. No password."""
+    """Generate OTP for email and print it in the backend terminal. No password. Only @gmail.com allowed."""
+    email = (body.email or "").strip().lower()
+    if not email.endswith("@gmail.com"):
+        raise HTTPException(status_code=400, detail="Invalid email. Only Gmail addresses (@gmail.com) are allowed.")
     ok = auth_send_otp(body.email)
     if not ok:
         raise HTTPException(status_code=400, detail="Invalid email")

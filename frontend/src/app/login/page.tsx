@@ -28,6 +28,10 @@ export default function LoginPage() {
       setError("Please enter a valid email.");
       return;
     }
+    if (!trimmed.endsWith("@gmail.com")) {
+      setError("Invalid email. Please use a Gmail address (e.g. you@gmail.com).");
+      return;
+    }
     setLoading(true);
     try {
       await sendOtp(trimmed);
@@ -91,7 +95,7 @@ export default function LoginPage() {
               </h1>
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 {step === "email"
-                  ? "Enter your email. We’ll show the OTP in the backend terminal."
+                  ? "Use your Gmail address (@gmail.com). We’ll show the OTP in the backend terminal."
                   : "Check the terminal where the backend is running and enter the 6-digit OTP."}
               </p>
             </div>
@@ -109,7 +113,7 @@ export default function LoginPage() {
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <Input
                       type="email"
-                      placeholder="you@example.com"
+                      placeholder="you@gmail.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="pl-10 rounded-xl border-2 border-gray-200 dark:border-gray-600 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
