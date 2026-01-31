@@ -5,6 +5,13 @@
 
 const PICSUM_BASE = "https://picsum.photos";
 
+/** Placeholder image as data URL - always loads, no network. Use when external image fails. */
+export function getProductImagePlaceholder(letter?: string): string {
+  const char = (letter || "?").charAt(0).toUpperCase();
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect fill="#94a3b8" width="400" height="400"/><text x="50%" y="50%" fill="#1e293b" font-size="120" text-anchor="middle" dy=".35em" font-family="system-ui,sans-serif" font-weight="600">${char}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 /** Safe URL for use in CSS url() - encodes & so path is valid */
 export function safeImageUrlForCss(url: string | undefined): string | undefined {
   if (!url) return undefined;
@@ -15,13 +22,6 @@ export function safeImageUrlForCss(url: string | undefined): string | undefined 
   } catch {
     return undefined;
   }
-}
-
-/** Placeholder image as data URL - always loads, no network. Use when external image fails. */
-export function getProductImagePlaceholder(letter?: string): string {
-  const char = (letter || "?").charAt(0).toUpperCase();
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect fill="#94a3b8" width="400" height="400"/><text x="50%" y="50%" fill="#1e293b" font-size="120" text-anchor="middle" dy=".35em" font-family="system-ui,sans-serif" font-weight="600">${char}</text></svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 export function getProductImage(category: string, id: string): string {
