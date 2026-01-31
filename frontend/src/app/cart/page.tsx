@@ -8,18 +8,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ProductCard } from "@/components/ProductCard";
 import { useCart, useAuth } from "@/app/providers";
-import { getCart, fetchRecommendations, trackEvent } from "@/lib/api";
+import { getCart, fetchRecommendations, trackEvent, updateCartQuantity } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 import { getProductImageSrc, getProductImagePlaceholder } from "@/lib/unsplash";
-import type { Product } from "@/lib/api";
+import type { Product, CartItem } from "@/lib/api";
 
 export default function CartPage() {
   const { sessionId, refreshCart } = useCart();
   const { user } = useAuth();
   const userId = user?.user_id;
-  const [cart, setCart] = useState<Product[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [upsells, setUpsells] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   useEffect(() => {
     trackEvent({
@@ -38,8 +39,8 @@ export default function CartPage() {
           getCart(sessionId, userId),
           fetchRecommendations(sessionId, { limit: 4, user_id: userId }),
         ]);
-        setCart(cartRes.cart);
-        const cartIds = cartRes.cart.map((p) => p.id);
+        setCart(Array.isArray(cartRes.cart) ? cartRes.cart : []);
+        const cartIds = (cartRes.cart as CartItem[]).map((p) => p.id);
         const upsellProducts = recRes.recommendations
           .filter((r) => !cartIds.includes(r.product_id))
           .slice(0, 4)
@@ -56,18 +57,44 @@ export default function CartPage() {
     if (sessionId) load();
   }, [sessionId, userId]);
 
-  const total = cart.reduce((sum, p) => sum + p.price, 0);
+  const total = cart.reduce((sum, p) => sum + p.price * (p.quantity ?? 1), 0);
+  const itemCount = cart.reduce((sum, p) => sum + (p.quantity ?? 1), 0);
 
   const handleRemove = async (productId: string) => {
-    await trackEvent({
-      event_type: "cart_remove",
-      session_id: sessionId,
-      product_id: productId,
-      ...(userId ? { user_id: userId } : {}),
-    });
-    refreshCart();
-    const { cart: updated } = await getCart(sessionId, userId);
-    setCart(updated);
+    setUpdatingId(productId);
+    try {
+      await updateCartQuantity(sessionId, productId, 0);
+      await trackEvent({
+        event_type: "cart_remove",
+        session_id: sessionId,
+        product_id: productId,
+        ...(userId ? { user_id: userId } : {}),
+      });
+      refreshCart();
+      const { cart: updated } = await getCart(sessionId, userId);
+      setCart(updated);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleQuantityChange = async (productId: string, newQuantity: number) => {
+    if (newQuantity < 1) {
+      await handleRemove(productId);
+      return;
+    }
+    setUpdatingId(productId);
+    try {
+      const { cart: updated } = await updateCartQuantity(sessionId, productId, newQuantity);
+      setCart(updated);
+      refreshCart();
+    } catch {
+      const { cart: updated } = await getCart(sessionId, userId);
+      setCart(updated);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
   };
 
   const handleAddToCart = (productId: string) => {
@@ -117,7 +144,7 @@ export default function CartPage() {
             Your cart
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {cart.length === 0 ? "No items yet" : `${cart.length} item${cart.length === 1 ? "" : "s"} in your cart`}
+            {cart.length === 0 ? "No items yet" : `${itemCount} item${itemCount === 1 ? "" : "s"} in your cart`}
           </p>
         </div>
         <Link href="/products" className="inline-flex shrink-0">
@@ -171,48 +198,85 @@ export default function CartPage() {
                 Cart items
               </h2>
               <div className="space-y-4">
-                {cart.map((item, i) => (
-                  <motion.div
-                    key={item.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    className="group flex gap-4 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/50 p-4 shadow-sm hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-900/50 transition-all duration-200"
-                  >
-                    <Link href={`/products/${item.id}`} className="flex-shrink-0 overflow-hidden rounded-xl bg-gray-100 dark:bg-gray-800 w-20 h-20 sm:w-24 sm:h-24 block">
-                      <img
-                        src={getProductImageSrc(item.image_url, item.category, item.id, item.name)}
-                        alt={item.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        loading="lazy"
-                        onError={(e) => {
-                          e.currentTarget.src = getProductImagePlaceholder(item.name);
-                        }}
-                      />
-                    </Link>
-                    <div className="flex-1 min-w-0">
-                      <Link
-                        href={`/products/${item.id}`}
-                        className="font-semibold text-gray-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 line-clamp-2 transition-colors"
-                      >
-                        {item.name}
-                      </Link>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{item.category}</p>
-                      <p className="font-bold text-indigo-600 dark:text-indigo-400 text-lg mt-2">
-                        {formatPrice(item.price)}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-10 w-10 rounded-xl shrink-0 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                      onClick={() => handleRemove(item.id)}
-                      aria-label="Remove from cart"
+                {cart.map((item, i) => {
+                  const qty = item.quantity ?? 1;
+                  const updating = updatingId === item.id;
+                  return (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.05 }}
+                      className="group flex gap-4 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/50 p-4 shadow-sm hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-900/50 transition-all duration-200"
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </motion.div>
-                ))}
+                      <Link href={`/products/${item.id}`} className="flex-shrink-0 overflow-hidden rounded-xl bg-gray-100 dark:bg-gray-800 w-20 h-20 sm:w-24 sm:h-24 block">
+                        <img
+                          src={getProductImageSrc(item.image_url, item.category, item.id, item.name)}
+                          alt={item.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          loading="lazy"
+                          onError={(e) => {
+                            e.currentTarget.src = getProductImagePlaceholder(item.name);
+                          }}
+                        />
+                      </Link>
+                      <div className="flex-1 min-w-0">
+                        <Link
+                          href={`/products/${item.id}`}
+                          className="font-semibold text-gray-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 line-clamp-2 transition-colors"
+                        >
+                          {item.name}
+                        </Link>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{item.category}</p>
+                        <p className="font-bold text-indigo-600 dark:text-indigo-400 text-lg mt-2">
+                          {formatPrice(item.price * qty)}
+                          {qty > 1 && (
+                            <span className="text-sm font-normal text-gray-500 dark:text-gray-400 ml-1">
+                              ({formatPrice(item.price)} × {qty})
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <div className="flex items-center rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-l-xl text-gray-600 hover:text-indigo-600 disabled:opacity-50"
+                            onClick={() => handleQuantityChange(item.id, qty - 1)}
+                            disabled={updating}
+                            aria-label="Decrease quantity"
+                          >
+                            −
+                          </Button>
+                          <span className="min-w-[2rem] text-center text-sm font-medium tabular-nums">
+                            {updating ? "…" : qty}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-r-xl text-gray-600 hover:text-indigo-600 disabled:opacity-50"
+                            onClick={() => handleQuantityChange(item.id, qty + 1)}
+                            disabled={updating}
+                            aria-label="Increase quantity"
+                          >
+                            +
+                          </Button>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-10 w-10 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                          onClick={() => handleRemove(item.id)}
+                          disabled={updating}
+                          aria-label="Remove from cart"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </div>
             </div>
 
@@ -226,7 +290,7 @@ export default function CartPage() {
                       Order summary
                     </h2>
                     <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-1">
-                      <span>Subtotal ({cart.length} items)</span>
+                      <span>Subtotal ({itemCount} items)</span>
                       <span>{formatPrice(total)}</span>
                     </div>
                     <div className="border-t border-gray-200 dark:border-gray-700 my-4 pt-4">

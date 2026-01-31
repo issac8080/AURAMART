@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Sparkles, Mail, LogIn, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { getSessionId } from "@/lib/session";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
@@ -54,7 +55,8 @@ export default function LoginPage() {
       const data = await verifyOtp(email, otp);
       login(data.email, data.name, data.user_id);
       await mergeCart(getSessionId(), data.user_id);
-      router.push("/profile");
+      const next = searchParams.get("next") || "/profile";
+      router.push(next.startsWith("/") ? next : "/profile");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid or expired OTP.");
     } finally {

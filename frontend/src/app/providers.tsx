@@ -1,10 +1,20 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useMemo } from "react";
 import { getSessionId } from "@/lib/session";
 import { getCart } from "@/lib/api";
 
 const AURA_USER_KEY = "aura_user";
+const LOGIN_COOKIE = "aura_logged_in";
+
+function setLoginCookie(loggedIn: boolean) {
+  if (typeof document === "undefined") return;
+  if (loggedIn) {
+    document.cookie = `${LOGIN_COOKIE}=1; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+  } else {
+    document.cookie = `${LOGIN_COOKIE}=; path=/; max-age=0`;
+  }
+}
 
 export type AuthUser = { email: string; name: string; user_id: string };
 
@@ -35,18 +45,26 @@ function getStoredUser(): AuthUser | null {
   }
 }
 
+function getInitialSessionId(): string {
+  if (typeof window === "undefined") return "";
+  return getSessionId();
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
-  const [sessionId, setSessionId] = useState("");
+  const [sessionId, setSessionId] = useState(getInitialSessionId);
   const [cartCount, setCartCount] = useState(0);
   const [user, setUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
-    setUser(getStoredUser());
+    const u = getStoredUser();
+    setUser(u);
+    setLoginCookie(!!u);
   }, []);
 
   const login = useCallback((email: string, name: string, user_id: string) => {
     const u = { email, name, user_id };
     setUser(u);
+    setLoginCookie(true);
     try {
       localStorage.setItem(AURA_USER_KEY, JSON.stringify(u));
     } catch {}
@@ -54,18 +72,34 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(() => {
     setUser(null);
+    setLoginCookie(false);
     try {
       localStorage.removeItem(AURA_USER_KEY);
     } catch {}
   }, []);
+
+  useEffect(() => {
+    const syncUser = () => {
+      const u = getStoredUser();
+      setUser(u);
+      setLoginCookie(!!u);
+    };
+    window.addEventListener("storage", syncUser);
+    return () => window.removeEventListener("storage", syncUser);
+  }, []);
+
+  const authValue = useMemo(() => ({ user, login, logout }), [user, login, logout]);
 
   const refreshCart = useCallback(async () => {
     const sid = getSessionId();
     setSessionId(sid);
     const uid = getStoredUser()?.user_id;
     try {
-      const { cart } = await getCart(sid, uid ?? undefined);
-      setCartCount(cart.length);
+      const { cart } = await getCart(sid);
+      const count = Array.isArray(cart)
+        ? cart.reduce((s, p) => s + (typeof (p as any).quantity === "number" ? (p as any).quantity : 1), 0)
+        : 0;
+      setCartCount(count);
     } catch {
       setCartCount(0);
     }
@@ -74,14 +108,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const sid = getSessionId();
     setSessionId(sid);
-    const uid = getStoredUser()?.user_id;
-    getCart(sid, uid ?? undefined)
-      .then(({ cart }) => setCartCount(cart.length))
+    const sid = getSessionId();
+    if (!sid) return;
+    getCart(sid)
+      .then(({ cart }) => {
+        const count = Array.isArray(cart)
+          ? cart.reduce((s, p) => s + (typeof (p as any).quantity === "number" ? (p as any).quantity : 1), 0)
+          : 0;
+        setCartCount(count);
+      })
       .catch(() => setCartCount(0));
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={authValue}>
       <CartContext.Provider value={{ cartCount, refreshCart, sessionId }}>
         {children}
       </CartContext.Provider>

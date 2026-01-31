@@ -31,11 +31,18 @@ def send_otp(email: str) -> bool:
     return True
 
 
+def _normalize_otp(otp: str) -> str:
+    """Strip non-digits and zero-pad to 6 chars so '12345' matches stored '012345'."""
+    digits = "".join(c for c in (otp or "").strip() if c.isdigit())
+    if len(digits) <= 6:
+        return digits.zfill(6)
+    return digits[:6]
+
+
 def verify_otp(email: str, otp: str) -> bool:
     """Verify OTP for email. Clear on success. Returns True if valid."""
     email = (email or "").strip().lower()
-    otp = (otp or "").strip()
-    if not email or not otp:
+    if not email:
         return False
     entry = _otp_store.get(email)
     if not entry:
@@ -43,7 +50,8 @@ def verify_otp(email: str, otp: str) -> bool:
     if datetime.utcnow() > entry["expires_at"]:
         del _otp_store[email]
         return False
-    if entry["otp"] != otp:
+    otp_normalized = _normalize_otp(str(otp))
+    if not otp_normalized or entry["otp"] != otp_normalized:
         return False
     del _otp_store[email]
     return True

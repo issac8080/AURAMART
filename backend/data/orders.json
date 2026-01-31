@@ -164,199 +164,315 @@
       "updated_at": "2026-01-30T22:46:06.543795"
     },
     {
-      "id": "ORD-20CAA7BF",
-      "user_id": "u3",
-      "items": [
-        {
-          "product_id": "P10733",
-          "quantity": 1,
-          "price": 449.0
-        }
-      ],
-      "total": 449.0,
-      "delivery_method": "home_delivery",
-      "status": "pending",
-      "delivery_address": null,
-      "store_location": null,
-      "qr_code": null,
-      "created_at": "2026-01-30T19:20:22.253202",
-      "updated_at": "2026-01-30T19:20:22.253202"
+{
+  "id": "ORD-20CAA7BF",
+  "user_id": "u3",
+  "items": [
+    {
+      "product_id": "P10733",
+      "quantity": 1,
+      "price": 449.0
+    }
+  ],
+  "total": 449.0,
+  "delivery_method": "home_delivery",
+  "status": "pending",
+  "delivery_address": null,
+  "store_location": null,
+  "qr_code": null,
+  "created_at": "2026-01-30T19:20:22.253202",
+  "updated_at": "2026-01-30T19:20:22.253202"
+},
+{
+  "id": "ORD-57451B74",
+  "user_id": "u3",
+  "items": [
+    {
+      "product_id": "P10733",
+      "quantity": 1,
+      "price": 449.0
+    }
+  ],
+  "total": 449.0,
+  "delivery_method": "home_delivery",
+  "status": "pending",
+  "delivery_address": null,
+  "store_location": null,
+  "qr_code": null,
+  "created_at": "2026-01-30T19:27:12.778289",
+  "updated_at": "2026-01-30T19:27:12.778289"
+},
+{
+  "id": "ORD-6C5D95BC",
+  "user_id": "u9",
+  "items": [
+    {
+      "product_id": "P01892",
+      "quantity": 1,
+      "price": 599.0
+    }
+  ],
+  "total": 599.0,
+  "delivery_method": "home_delivery",
+  "status": "pending",
+  "delivery_address": null,
+  "store_location": null,
+  "qr_code": null,
+  "created_at": "2026-01-30T19:33:59.533346",
+  "updated_at": "2026-01-30T19:33:59.533346"
+},
+{
+  "id": "ORD-DD68655C",
+  "user_id": "u3",
+  "items": [
+    {
+      "product_id": "P00098",
+      "quantity": 1,
+      "price": 849.0
     },
     {
-      "id": "ORD-57451B74",
-      "user_id": "u3",
-      "items": [
-        {
-          "product_id": "P10733",
-          "quantity": 1,
-          "price": 449.0
-        }
-      ],
-      "total": 449.0,
-      "delivery_method": "home_delivery",
-      "status": "pending",
-      "delivery_address": null,
-      "store_location": null,
-      "qr_code": null,
-      "created_at": "2026-01-30T19:27:12.778289",
-      "updated_at": "2026-01-30T19:27:12.778289"
-    },
+      "product_id": "P00157",
+      "quantity": 1,
+      "price": 1049.0
+    }
+  ],
+  "total": 1898.0,
+  "delivery_method": "home_delivery",
+  "status": "pending",
+  "delivery_address": null,
+  "store_location": null,
+  "qr_code": null,
+  "created_at": "2026-01-30T19:58:57.620433",
+  "updated_at": "2026-01-30T19:58:57.620433"
+},
+{
+  "id": "ORD-AFA4BC73",
+  "user_id": "sess_mkc18k9d3hml1jptjv",
+  "items": [
     {
-      "id": "ORD-6C5D95BC",
-      "user_id": "u9",
-      "items": [
-        {
-          "product_id": "P01892",
-          "quantity": 1,
-          "price": 599.0
-        }
-      ],
-      "total": 599.0,
-      "delivery_method": "home_delivery",
-      "status": "pending",
-      "delivery_address": null,
-      "store_location": null,
-      "qr_code": null,
-      "created_at": "2026-01-30T19:33:59.533346",
-      "updated_at": "2026-01-30T19:33:59.533346"
-    },
+      "product_id": "P07601",
+      "quantity": 1,
+      "price": 539.0
+    }
+  ],
+  "total": 539.0,
+  "delivery_method": "home_delivery",
+  "status": "pending",
+  "delivery_address": "fajdflkdaf",
+  "store_location": null,
+  "qr_code": null,
+  "created_at": "2026-01-31T00:01:39.409765",
+  "updated_at": "2026-01-31T00:01:39.409765"
+},
+{
+  "id": "ORD-E05658B8",
+  "user_id": "sess_mxp8stzbwucml1inpgn",
+  "items": [
     {
-      "id": "ORD-DD68655C",
-      "user_id": "u3",
-      "items": [
-        {
-          "product_id": "P00098",
-          "quantity": 1,
-          "price": 849.0
-        },
-        {
-          "product_id": "P00157",
-          "quantity": 1,
-          "price": 1049.0
-        }
-      ],
-      "total": 1898.0,
-      "delivery_method": "home_delivery",
-      "status": "pending",
-      "delivery_address": null,
-      "store_location": null,
-      "qr_code": null,
-      "created_at": "2026-01-30T19:58:57.620433",
-      "updated_at": "2026-01-30T19:58:57.620433"
-    },
+      "product_id": "P04868",
+      "quantity": 1,
+      "price": 3300.0
+    }
+  ],
+  "total": 3300.0,
+  "delivery_method": "home_delivery",
+  "status": "pending",
+  "delivery_address": "dfalkjfdlk",
+  "store_location": null,
+  "qr_code": null,
+  "created_at": "2026-01-31T00:08:41.699609",
+  "updated_at": "2026-01-31T00:08:41.699609"
+},
+{
+  "id": "ORD-0E5CF205",
+  "user_id": "user_53e6cdc30765aade",
+  "items": [
     {
-      "id": "ORD-AFA4BC73",
-      "user_id": "sess_mkc18k9d3hml1jptjv",
-      "items": [
-        {
-          "product_id": "P07601",
-          "quantity": 1,
-          "price": 539.0
-        }
-      ],
-      "total": 539.0,
-      "delivery_method": "home_delivery",
-      "status": "pending",
-      "delivery_address": "fajdflkdaf",
-      "store_location": null,
-      "qr_code": null,
-      "created_at": "2026-01-31T00:01:39.409765",
-      "updated_at": "2026-01-31T00:01:39.409765"
-    },
+      "product_id": "P11465",
+      "quantity": 1,
+      "price": 13299.0
+    }
+  ],
+  "total": 13299.0,
+  "delivery_method": "home_delivery",
+  "status": "pending",
+  "delivery_address": null,
+  "store_location": null,
+  "qr_code": null,
+  "created_at": "2026-01-31T04:39:25.927422",
+  "updated_at": "2026-01-31T04:39:25.927422"
+},
+{
+  "id": "ORD-B43807D6",
+  "user_id": "user_53e6cdc30765aade",
+  "items": [
     {
-      "id": "ORD-E05658B8",
-      "user_id": "sess_mxp8stzbwucml1inpgn",
-      "items": [
-        {
-          "product_id": "P04868",
-          "quantity": 1,
-          "price": 3300.0
-        }
-      ],
-      "total": 3300.0,
-      "delivery_method": "home_delivery",
-      "status": "pending",
-      "delivery_address": "dfalkjfdlk",
-      "store_location": null,
-      "qr_code": null,
-      "created_at": "2026-01-31T00:08:41.699609",
-      "updated_at": "2026-01-31T00:08:41.699609"
-    },
+      "product_id": "P15668",
+      "quantity": 1,
+      "price": 1899.0
+    }
+  ],
+  "total": 1899.0,
+  "delivery_method": "home_delivery",
+  "status": "pending",
+  "delivery_address": "Upside Down",
+  "store_location": null,
+  "qr_code": null,
+  "created_at": "2026-01-31T05:57:57.719581",
+  "updated_at": "2026-01-31T05:57:57.719581"
+},
+{
+  "id": "ORD-A194425D",
+  "user_id": "user_53e6cdc30765aade",
+  "items": [
     {
-      "id": "ORD-0E5CF205",
-      "user_id": "user_53e6cdc30765aade",
-      "items": [
-        {
-          "product_id": "P11465",
-          "quantity": 1,
-          "price": 13299.0
-        }
-      ],
-      "total": 13299.0,
-      "delivery_method": "home_delivery",
-      "status": "pending",
-      "delivery_address": null,
-      "store_location": null,
-      "qr_code": null,
-      "created_at": "2026-01-31T04:39:25.927422",
-      "updated_at": "2026-01-31T04:39:25.927422"
-    },
+      "product_id": "P15668",
+      "quantity": 1,
+      "price": 1899.0
+    }
+  ],
+  "total": 1899.0,
+  "delivery_method": "home_delivery",
+  "status": "pending",
+  "delivery_address": "Upside Down",
+  "store_location": null,
+  "qr_code": null,
+  "created_at": "2026-01-31T05:58:00.886755",
+  "updated_at": "2026-01-31T05:58:00.886755"
+},
+{
+  "id": "ORD-6119065C",
+  "user_id": "user_53e6cdc30765aade",
+  "items": [
     {
-      "id": "ORD-B43807D6",
-      "user_id": "user_53e6cdc30765aade",
-      "items": [
-        {
-          "product_id": "P15668",
-          "quantity": 1,
-          "price": 1899.0
-        }
-      ],
-      "total": 1899.0,
-      "delivery_method": "home_delivery",
-      "status": "pending",
-      "delivery_address": "Upside Down",
-      "store_location": null,
-      "qr_code": null,
-      "created_at": "2026-01-31T05:57:57.719581",
-      "updated_at": "2026-01-31T05:57:57.719581"
-    },
+      "product_id": "P00022",
+      "quantity": 1,
+      "price": 2072.0
+    }
+  ],
+  "total": 2072.0,
+  "delivery_method": "home_delivery",
+  "status": "pending",
+  "delivery_address": null,
+  "store_location": null,
+  "qr_code": null,
+  "created_at": "2026-01-31T06:20:52.753424",
+  "updated_at": "2026-01-31T06:20:52.753424"
+},
+{
+  "id": "ORD-74037F43",
+  "user_id": "sess_bxzlitryjoeml1ylp95",
+  "items": [
     {
-      "id": "ORD-A194425D",
-      "user_id": "user_53e6cdc30765aade",
-      "items": [
-        {
-          "product_id": "P15668",
-          "quantity": 1,
-          "price": 1899.0
-        }
-      ],
-      "total": 1899.0,
-      "delivery_method": "home_delivery",
-      "status": "pending",
-      "delivery_address": "Upside Down",
-      "store_location": null,
-      "qr_code": null,
-      "created_at": "2026-01-31T05:58:00.886755",
-      "updated_at": "2026-01-31T05:58:00.886755"
-    },
+      "product_id": "P15635",
+      "quantity": 1,
+      "price": 63.0
+    }
+  ],
+  "total": 63.0,
+  "delivery_method": "home_delivery",
+  "status": "pending",
+  "delivery_address": "aaaaaaaaa",
+  "store_location": null,
+  "qr_code": null,
+  "created_at": "2026-01-31T07:15:41.751561",
+  "updated_at": "2026-01-31T07:15:41.751561"
+},
+{
+  "id": "ORD-06F2F371",
+  "user_id": "sess_bxzlitryjoeml1ylp95",
+  "items": [
     {
-      "id": "ORD-6119065C",
-      "user_id": "user_53e6cdc30765aade",
-      "items": [
-        {
-          "product_id": "P00022",
-          "quantity": 1,
-          "price": 2072.0
-        }
-      ],
-      "total": 2072.0,
-      "delivery_method": "home_delivery",
-      "status": "pending",
-      "delivery_address": null,
-      "store_location": null,
-      "qr_code": null,
-      "created_at": "2026-01-31T06:20:52.753424",
-      "updated_at": "2026-01-31T06:20:52.753424"
+      "product_id": "P15635",
+      "quantity": 1,
+      "price": 63.0
+    }
+  ],
+  "total": 63.0,
+  "delivery_method": "home_delivery",
+  "status": "pending",
+  "delivery_address": "aaaaaaaaa",
+  "store_location": null,
+  "qr_code": null,
+  "created_at": "2026-01-31T07:15:43.140036",
+  "updated_at": "2026-01-31T07:15:43.140036"
+},
+{
+  "id": "ORD-D081A439",
+  "user_id": "sess_bxzlitryjoeml1ylp95",
+  "items": [
+    {
+      "product_id": "P15635",
+      "quantity": 1,
+      "price": 63.0
+    }
+  ],
+  "total": 63.0,
+  "delivery_method": "home_delivery",
+  "status": "pending",
+  "delivery_address": "aaaaaaaaa",
+  "store_location": null,
+  "qr_code": null,
+  "created_at": "2026-01-31T07:15:43.399814",
+  "updated_at": "2026-01-31T07:15:43.399814"
+},
+{
+  "id": "ORD-1456CB6A",
+  "user_id": "sess_bxzlitryjoeml1ylp95",
+  "items": [
+    {
+      "product_id": "P15635",
+      "quantity": 1,
+      "price": 63.0
+    }
+  ],
+  "total": 63.0,
+  "delivery_method": "home_delivery",
+  "status": "cancelled",
+  "delivery_address": "aaaaaaaaa",
+  "store_location": null,
+  "qr_code": null,
+  "created_at": "2026-01-31T07:15:44.120606",
+  "updated_at": "2026-01-31T07:15:58.244972"
+},
+{
+  "id": "ORD-284064C1",
+  "user_id": "sess_bxzlitryjoeml1ylp95",
+  "items": [
+    {
+      "product_id": "P15635",
+      "quantity": 4,
+      "price": 63.0
+    }
+  ],
+  "total": 252.0,
+  "delivery_method": "home_delivery",
+  "status": "cancelled",
+  "delivery_address": "aaaaaaaaaaaaaaaaaaaaaaa",
+  "store_location": null,
+  "qr_code": null,
+  "created_at": "2026-01-31T07:21:24.402803",
+  "updated_at": "2026-01-31T07:21:39.653886"
+},
+{
+  "id": "ORD-7687044E",
+  "user_id": "sess_bxzlitryjoeml1ylp95",
+  "items": [
+    {
+      "product_id": "P15635",
+      "quantity": 3,
+      "price": 63.0
+    }
+  ],
+  "total": 189.0,
+  "delivery_method": "home_delivery",
+  "status": "cancelled",
+  "delivery_address": "111111111111",
+  "store_location": null,
+  "qr_code": null,
+  "created_at": "2026-01-31T07:31:53.077371",
+  "updated_at": "2026-01-31T07:32:51.496916"
+}
     }
   ]
 }

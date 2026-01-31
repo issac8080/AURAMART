@@ -361,6 +361,24 @@ export async function removeFromCart(sessionId: string, productId: string): Prom
   });
 }
 
+/** Cart item with quantity (from GET /cart). */
+export type CartItem = Product & { quantity: number };
+
+/** Set quantity for a product in cart. quantity 0 removes the item. Returns updated cart. */
+export async function updateCartQuantity(
+  sessionId: string,
+  productId: string,
+  quantity: number
+): Promise<{ cart: CartItem[] }> {
+  const res = await fetch(`${API}/session/${sessionId}/cart/item`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ product_id: productId, quantity }),
+  });
+  if (!res.ok) throw new Error("Failed to update cart");
+  return res.json();
+}
+
 export type Order = {
   id: string;
   user_id: string;

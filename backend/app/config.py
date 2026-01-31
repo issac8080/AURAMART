@@ -12,3 +12,7 @@ MYSQL_URI = os.getenv("MYSQL_URI", "")
 # Fast mode: set to "1" to skip RAG/Chroma and use only data_store (instant). Default "0" = use RAG.
 USE_FAST_RECOMMEND = os.getenv("USE_FAST_RECOMMEND", "0").strip().lower() in ("1", "true", "yes")
 USE_FAST_CHAT = os.getenv("USE_FAST_CHAT", "0").strip().lower() in ("1", "true", "yes")
+
+# Razorpay (get keys from https://dashboard.razorpay.com/app/keys)
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "").strip()
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "").strip()
