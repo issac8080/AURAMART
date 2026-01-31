@@ -23,13 +23,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ProductCarousel } from "@/components/ProductCarousel";
-<<<<<<< HEAD
 import { FestivalBanner } from "@/discountFrontend/FestivalBanner";
-=======
 import { HomeSpinWheel } from "@/components/HomeSpinWheel";
 import { HomeJackpot } from "@/components/HomeJackpot";
 import { HomeScratch } from "@/components/HomeScratch";
->>>>>>> 81bbfd8e9f9d0088f61e83fc2e3f67dd6beea52b
 import { useCart } from "@/app/providers";
 import {
   fetchProducts,
@@ -356,10 +353,8 @@ export default function HomePage() {
         </div>
       </motion.section>
 
-<<<<<<< HEAD
       <FestivalBanner />
 
-=======
       {/* Shop by category – many options */}
       <motion.section
         initial={{ opacity: 0, y: 12 }}
@@ -393,7 +388,6 @@ export default function HomePage() {
       </motion.section>
 
       {/* Recommended for you */}
->>>>>>> 81bbfd8e9f9d0088f61e83fc2e3f67dd6beea52b
       {loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {[...Array(8)].map((_, i) => (

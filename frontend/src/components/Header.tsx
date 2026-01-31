@@ -4,11 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-<<<<<<< HEAD
-import { ShoppingBag, Sparkles, User, Wallet, Tag, Menu, X } from "lucide-react";
-=======
-import { ShoppingBag, Sparkles, User, Wallet, Menu, X, LogIn, LogOut } from "lucide-react";
->>>>>>> 81bbfd8e9f9d0088f61e83fc2e3f67dd6beea52b
+import { ShoppingBag, Sparkles, User, Wallet, Tag, Menu, X, LogIn, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/SearchBar";
 import { useCart, useAuth } from "@/app/providers";
