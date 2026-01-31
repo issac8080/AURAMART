@@ -1,0 +1,12 @@
+[
+  {"q": "What is AuraShop?", "a": "AuraShop is an AI-powered shopping assistant that helps you discover products, get personalized recommendations, and complete orders. You can ask for product suggestions, check your cart, track orders, and manage your Aura Wallet."},
+  {"q": "How does delivery work?", "a": "We offer Home Delivery (shipped to your address) and Store Pickup (order online, collect at a store). You choose at checkout. Store pickup is usually ready within 24-48 hours."},
+  {"q": "What is Aura Wallet and AuraPoints?", "a": "Aura Wallet holds your balance and AuraPoints (rewards). You earn 5% on orders under Rs 1000 and 7% on orders Rs 1000 and above. Points are credited after delivery, valid 30 days. You can use them for purchases or add money via Razorpay."},
+  {"q": "How do I track my order?", "a": "Go to Profile then My Orders and click your order. You will see status: pending, confirmed, ready for pickup, delivered. For store pickup you get a QR code to show at the store."},
+  {"q": "Can I cancel my order?", "a": "Yes. Go to order details and use Cancel. Possible before the order is shipped or ready for pickup. Refunds go to your payment method or Aura Wallet."},
+  {"q": "How do I return or get a refund?", "a": "Contact support from the order page. Once approved, ship the item back. Refunds are credited within 5-7 business days."},
+  {"q": "Is my payment secure?", "a": "Yes. We use secure payment processing. Wallet top-up uses Razorpay. Card and wallet details are not stored in full on our servers."},
+  {"q": "How do I get product recommendations?", "a": "Use the AI chat: recommend phones under 30000, best casual shirts, or trending products. Our AI uses your browsing and preferences. You can also browse by category and use filters."},
+  {"q": "Can the AI order something for me?", "a": "Yes. In chat say order this for me or buy the items in my cart. The assistant will guide you to checkout and help complete the order. You confirm before payment."},
+  {"q": "What if a product is out of stock?", "a": "Out-of-stock items are marked on the product page. Ask the AI for similar alternatives or add to wishlist to get notified when back."}
+]

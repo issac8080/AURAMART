@@ -12,7 +12,7 @@ import { useCart } from "@/app/providers";
 import { fetchProduct, fetchRecommendations, trackEvent } from "@/lib/api";
 import { recordProductView } from "@/discountFrontend/api";
 import { formatPrice } from "@/lib/utils";
-import { getProductImageUrl } from "@/lib/unsplash";
+import { getProductImageSrc, getProductImagePlaceholder } from "@/lib/unsplash";
 import type { Product } from "@/lib/api";
 
 export default function ProductDetailPage() {
@@ -123,18 +123,13 @@ export default function ProductDetailPage() {
       >
         <div className="aspect-square rounded-xl bg-muted overflow-hidden relative">
           <img
-            src={getProductImageUrl(product.image_url, product.category, product.id)}
+            src={getProductImageSrc(product.image_url, product.category, product.id, product.name)}
             alt={product.name}
             className="w-full h-full object-cover"
             onError={(e) => {
-              const target = e.currentTarget;
-              if (!target.dataset.fallback) {
-                target.dataset.fallback = "1";
-                target.src = `https://picsum.photos/seed/${product.id.replace(/\W/g, "")}/400/400`;
-              }
+              e.currentTarget.src = getProductImagePlaceholder(product.name);
             }}
           />
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-accent/20 pointer-events-none" aria-hidden />
         </div>
 
         <div className="space-y-4">

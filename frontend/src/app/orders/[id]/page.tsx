@@ -1,22 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Package, Store, Home, Check, Clock, Truck, ArrowLeft, X, Gift, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatPrice } from "@/lib/utils";
+import { SpinWheel } from "@/components/SpinWheel";
+import { useCart } from "@/app/providers";
 
 const API = "/api";
 
 type Order = {
   id: string;
   user_id: string;
-  items: Array<{ product_id: string; quantity: number; price: number }>;
+  items: Array<{ product_id: string; product_name?: string; quantity: number; price: number; image_url?: string | null }>;
   total: number;
   delivery_method: string;
   status: string;
@@ -39,11 +41,15 @@ const statusConfig: Record<string, { label: string; icon: any; color: string }> 
 export default function OrderDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { sessionId } = useCart();
   const orderId = params?.id as string;
+  const showSpin = searchParams.get("spin") === "1";
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
   const [cashbackInfo, setCashbackInfo] = useState<{ amount: number; rate: string } | null>(null);
+  const [spinOpen, setSpinOpen] = useState(false);
 
   useEffect(() => {
     async function loadOrder() {
@@ -73,6 +79,15 @@ export default function OrderDetailPage() {
     }
     if (orderId) loadOrder();
   }, [orderId]);
+
+  useEffect(() => {
+    if (showSpin && order && !loading) setSpinOpen(true);
+  }, [showSpin, order, loading]);
+
+  const closeSpin = () => {
+    setSpinOpen(false);
+    router.replace(`/orders/${orderId}`, { scroll: false });
+  };
 
   const handleCancelOrder = async () => {
     if (!confirm("Are you sure you want to cancel this order?")) return;
@@ -118,6 +133,7 @@ export default function OrderDetailPage() {
   const StatusIcon = statusInfo.icon;
 
   return (
+    <>
     <div className="py-8 space-y-6">
       <div className="flex items-center gap-3">
         <Link href="/profile">
@@ -289,7 +305,7 @@ export default function OrderDetailPage() {
               {order.status !== "cancelled" && order.status !== "delivered" && order.status !== "picked_up" && (
                 <Button
                   variant="destructive"
-                  className="w-full mt-4"
+                  className="w-full mt-4 bg-red-600 hover:bg-red-700 text-white"
                   onClick={handleCancelOrder}
                   disabled={cancelling}
                 >
@@ -302,5 +318,16 @@ export default function OrderDetailPage() {
         </div>
       </div>
     </div>
+    <AnimatePresence>
+      {spinOpen && (
+        <SpinWheel
+          orderId={orderId}
+          sessionId={sessionId}
+          onClose={closeSpin}
+          onDone={closeSpin}
+        />
+      )}
+    </AnimatePresence>
+    </>
   );
 }
