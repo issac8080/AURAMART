@@ -2,6 +2,9 @@
 backend/.venv/
 backend/then/
 backend/__pycache__/
+
+# Old return module (not needed)
+retun/
 backend/**/__pycache__/
 backend/.env
 backend/*.pyc
@@ -12,7 +15,8 @@ backend/pip-log.txt
 backend/pip-delete-this-directory.txt
 backend/venv/
 backend/data/
-# Frontend
+# Frontend / Node
+node_modules/
 frontend/node_modules/
 frontend/.next/
 frontend/out/
