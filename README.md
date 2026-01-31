@@ -95,10 +95,20 @@ App: `http://localhost:3000`. The app uses Next.js rewrites so `/api/*` is proxi
 
 **Backend** (`backend/.env`):
 
-- `OPENAI_API_KEY` – Your OpenAI API key (required for AI recommendations and chat).
+- `OPENAI_API_KEY` – Your OpenAI API key (used for intent classification and FAQ LLM in recommend.chatbot).
 - `CORS_ORIGINS` – Default `http://localhost:3000`.
+- **RAG (default):** Recommendations and chat use the recommend module (Chroma + semantic search, recommend.chatbot). Set `USE_FAST_RECOMMEND=1` and/or `USE_FAST_CHAT=1` to use only JSON products and a static chat reply (no Chroma load) if you want instant startup.
 
 No env vars are required in the frontend for the default setup.
+
+### 4. How everything is connected
+
+- **Frontend (Next.js)** → calls backend at `http://localhost:8000` via `/api/*` proxy (products, recommendations, chat, cart, orders, wallet).
+- **Backend (FastAPI)** → serves API; uses **JSON files** for primary persistence (`data/products.json`, `data/orders.json`) and **recommend DB** (SQLite `data/recommend.db` or MySQL via `MYSQL_URI`) for RAG.
+- **Database (recommend)** → On startup the backend ensures the recommend DB has tables and syncs **products**, **orders**, and **FAQ** from JSON into the DB so RAG, habits, and the recommendation engine see the same data. Every new order is written to both `orders.json` and the recommend DB.
+- **RAG (Chroma + recommend)** → Reads products, orders, and FAQ from the recommend DB for semantic search and chatbot. Run `python -m scripts.build_rag_index` after first sync to build Chroma indices.
+
+So: **Frontend → Backend API → JSON + recommend DB**; RAG uses the same DB.
 
 ## API Overview
 

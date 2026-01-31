@@ -102,41 +102,70 @@ def get_events(session_id: str, limit: int = 100) -> List[dict]:
     return list(reversed(_events.get(session_id, [])[:limit]))
 
 
-def get_cart(session_id: str) -> List[str]:
-    return list(_carts.get(session_id, []))
+def _actor_id(session_id: str, user_id: Optional[str] = None) -> str:
+    """Use user_id when provided (logged-in), else session_id (guest)."""
+    return (user_id or "").strip() or session_id
 
 
-def add_to_cart(session_id: str, product_id: str) -> None:
-    if session_id not in _carts:
-        _carts[session_id] = []
-    if product_id not in _carts[session_id]:
-        _carts[session_id].append(product_id)
+def get_cart(session_id: str, user_id: Optional[str] = None) -> List[str]:
+    key = _actor_id(session_id, user_id)
+    return list(_carts.get(key, []))
 
 
-def remove_from_cart(session_id: str, product_id: str) -> None:
-    if session_id in _carts and product_id in _carts[session_id]:
-        _carts[session_id].remove(product_id)
+def add_to_cart(session_id: str, product_id: str, user_id: Optional[str] = None) -> None:
+    key = _actor_id(session_id, user_id)
+    if key not in _carts:
+        _carts[key] = []
+    if product_id not in _carts[key]:
+        _carts[key].append(product_id)
 
 
-def clear_cart(session_id: str) -> None:
+def remove_from_cart(session_id: str, product_id: str, user_id: Optional[str] = None) -> None:
+    key = _actor_id(session_id, user_id)
+    if key in _carts and product_id in _carts[key]:
+        _carts[key].remove(product_id)
+
+
+def clear_cart(session_id: str, user_id: Optional[str] = None) -> None:
     """Clear all items from cart."""
-    if session_id in _carts:
-        _carts[session_id] = []
+    key = _actor_id(session_id, user_id)
+    if key in _carts:
+        _carts[key] = []
 
 
-def set_profile(session_id: str, profile: dict) -> None:
-    _profiles[session_id] = profile
+def merge_cart_into_user(session_id: str, user_id: str) -> None:
+    """Merge guest cart (session_id) into user cart (user_id) and clear guest cart. Call after login."""
+    if not (user_id and user_id.strip()):
+        return
+    user_id = user_id.strip()
+    guest_ids = _carts.get(session_id, [])
+    if not guest_ids:
+        return
+    user_cart = _carts.get(user_id, [])
+    seen = set(user_cart)
+    for pid in guest_ids:
+        if pid not in seen:
+            user_cart.append(pid)
+            seen.add(pid)
+    _carts[user_id] = user_cart
+    _carts[session_id] = []
 
 
-def get_profile(session_id: str) -> dict:
-    return _profiles.get(session_id, {})
+def set_profile(session_id: str, profile: dict, user_id: Optional[str] = None) -> None:
+    key = _actor_id(session_id, user_id)
+    _profiles[key] = profile
 
 
-def get_session_context(session_id: str) -> dict:
-    """Build context for AI: events, cart, profile, viewed product IDs."""
+def get_profile(session_id: str, user_id: Optional[str] = None) -> dict:
+    key = _actor_id(session_id, user_id)
+    return _profiles.get(key, {})
+
+
+def get_session_context(session_id: str, user_id: Optional[str] = None) -> dict:
+    """Build context for AI: events, cart, profile, viewed product IDs. Uses user_id when provided (logged-in)."""
     events = get_events(session_id, 80)
-    cart_ids = get_cart(session_id)
-    profile = get_profile(session_id)
+    cart_ids = get_cart(session_id, user_id)
+    profile = get_profile(session_id, user_id)
     viewed_ids = [
         e.get("product_id") for e in events
         if e.get("event_type") in (EventType.PRODUCT_CLICK.value, EventType.PAGE_VIEW.value)
@@ -163,14 +192,15 @@ def get_session_context(session_id: str) -> dict:
     }
 
 
-def cache_recommendations(session_id: str, context_key: str, recs: List[dict]) -> None:
-    key = f"{session_id}:{context_key}"
+def cache_recommendations(session_id: str, context_key: str, recs: List[dict], user_id: Optional[str] = None) -> None:
+    actor = _actor_id(session_id, user_id)
+    key = f"{actor}:{context_key}"
     _rec_cache[key] = recs
     if len(_rec_cache) > _CACHE_MAX:
-        # Evict oldest (simple: remove first few keys)
         for k in list(_rec_cache.keys())[:_CACHE_MAX // 2]:
             del _rec_cache[k]
 
 
-def get_cached_recommendations(session_id: str, context_key: str) -> Optional[List[dict]]:
-    return _rec_cache.get(f"{session_id}:{context_key}")
+def get_cached_recommendations(session_id: str, context_key: str, user_id: Optional[str] = None) -> Optional[List[dict]]:
+    actor = _actor_id(session_id, user_id)
+    return _rec_cache.get(f"{actor}:{context_key}")

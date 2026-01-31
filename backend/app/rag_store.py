@@ -36,12 +36,14 @@ def _get_client():
     if _chroma_client is None and _rag_available_check():
         try:
             import chromadb
-            from chromadb.config import Settings
+            from chromadb.config import Settings, DEFAULT_TENANT, DEFAULT_DATABASE
             PERSIST_DIR = Path(__file__).resolve().parent.parent / "data" / "chroma_db"
             PERSIST_DIR.mkdir(parents=True, exist_ok=True)
             _chroma_client = chromadb.PersistentClient(
                 path=str(PERSIST_DIR),
                 settings=Settings(anonymized_telemetry=False),
+                tenant=DEFAULT_TENANT,
+                database=DEFAULT_DATABASE,
             )
         except Exception:
             pass

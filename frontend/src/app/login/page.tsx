@@ -8,7 +8,8 @@ import { Sparkles, Mail, LogIn, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/app/providers";
-import { sendOtp, verifyOtp } from "@/lib/api";
+import { sendOtp, verifyOtp, mergeCart } from "@/lib/api";
+import { getSessionId } from "@/lib/session";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -51,7 +52,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const data = await verifyOtp(email, otp);
-      login(data.email, data.name);
+      login(data.email, data.name, data.user_id);
+      await mergeCart(getSessionId(), data.user_id);
       router.push("/profile");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid or expired OTP.");

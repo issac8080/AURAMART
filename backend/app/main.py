@@ -29,6 +29,7 @@ from app.data_store import (
     remove_from_cart,
     clear_cart,
     get_session_context,
+    merge_cart_into_user,
 )
 from app.recommend_bridge import get_recommendations, chat as ai_chat
 from app.order_service import (
@@ -43,6 +44,7 @@ from app.order_service import (
     get_available_stores,
 )
 from app.auth_otp import send_otp as auth_send_otp, verify_otp as auth_verify_otp
+from app.user_service import get_or_create_user_by_email
 from app.coupon_game import (
     play as coupon_game_play,
     play_jackpot as coupon_game_jackpot,
@@ -67,10 +69,42 @@ from app.wallet_service import (
 )
 
 
+def _warmup_embeddings():
+    """Load sentence transformer and Chroma embedding models at startup so first chat is fast."""
+    try:
+        from recommend.rag_products import init_embeddings
+        init_embeddings()
+    except Exception as e:
+        print(f"Embedding warmup (rag_products): {e}")
+    try:
+        from recommend.rag_products import _get_product_collection
+        coll = _get_product_collection()
+        if coll is not None:
+            coll.query(query_texts=["warmup"], n_results=1)
+    except Exception as e:
+        print(f"Chroma products warmup: {e}")
+    try:
+        from recommend.rag_faq import _get_faq_collection
+        coll = _get_faq_collection()
+        if coll is not None:
+            coll.query(query_texts=["warmup"], n_results=1)
+    except Exception as e:
+        print(f"Chroma FAQ warmup: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
         load_products()
+    except Exception:
+        pass
+    try:
+        from app.db_sync import init_recommend_db_and_sync_products
+        init_recommend_db_and_sync_products()
+    except Exception:
+        pass
+    try:
+        _warmup_embeddings()
     except Exception:
         pass
     yield
@@ -137,17 +171,18 @@ def product_detail(product_id: str):
 @app.post("/events")
 def track_event(payload: EventPayload):
     add_event(payload)
-    # Optional: update cart for cart_add/cart_remove
+    # Optional: update cart for cart_add/cart_remove; use user_id when logged in
     if payload.event_type.value == "cart_add" and payload.product_id:
-        add_to_cart(payload.session_id, payload.product_id)
+        add_to_cart(payload.session_id, payload.product_id, payload.user_id)
     elif payload.event_type.value == "cart_remove" and payload.product_id:
-        remove_from_cart(payload.session_id, payload.product_id)
+        remove_from_cart(payload.session_id, payload.product_id, payload.user_id)
     return {"ok": True}
 
 
 @app.get("/recommendations")
 def recommendations(
     session_id: str = Query(..., description="Session ID"),
+    user_id: str | None = Query(None, description="User ID when logged in"),
     limit: int = Query(5, le=20),
     max_price: float | None = Query(None),
     category: str | None = Query(None),
@@ -160,6 +195,7 @@ def recommendations(
         max_price=max_price,
         category=category,
         exclude_product_ids=exclude,
+        user_id=user_id,
     )
     return {"recommendations": recs}
 
@@ -187,16 +223,24 @@ def chat_endpoint(body: ChatRequest):
     return result
 
 
-def _sse_stream(session_id: str, message: str, history: list):
+def _sse_stream(session_id: str, message: str, history: list, user_id: str | None = None):
     import json
-    for chunk in ai_chat_stream(session_id=session_id, message=message, history=history):
-        yield f"data: {json.dumps(chunk)}\n\n"
+    result = ai_chat(
+        session_id=session_id,
+        message=message,
+        history=history,
+        user_id=user_id,
+    )
+    content = result.get("content", "")
+    product_ids = result.get("product_ids", [])[:6]
+    yield f"data: {json.dumps({'content': content})}\n\n"
+    yield f"data: {json.dumps({'done': True, 'product_ids': product_ids})}\n\n"
 
 
 @app.post("/chat/stream")
 def chat_stream_endpoint(body: ChatRequest):
     return StreamingResponse(
-        _sse_stream(body.session_id, body.message, body.history or []),
+        _sse_stream(body.session_id, body.message, body.history or [], body.user_id),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )
@@ -213,14 +257,22 @@ def auth_send_otp_endpoint(body: SendOtpRequest):
 
 @app.post("/auth/verify-otp")
 def auth_verify_otp_endpoint(body: VerifyOtpRequest):
-    """Verify OTP and return success. Frontend can then log the user in (email only)."""
+    """Verify OTP and return success + user_id from DB. Frontend uses user_id for cart, orders, wallet, chat."""
     ok = auth_verify_otp(body.email, body.otp)
     if not ok:
         raise HTTPException(status_code=400, detail="Invalid or expired OTP")
     name = body.email.split("@")[0].replace(".", " ").replace("_", " ")
     if name:
         name = name[0].upper() + name[1:]
-    return {"success": True, "email": body.email.strip().lower(), "name": name or "User"}
+    user = get_or_create_user_by_email(body.email.strip().lower(), name or "User")
+    return {"success": True, "user_id": user["user_id"], "email": user["email"], "name": user["name"]}
+
+
+@app.post("/auth/merge-cart")
+def auth_merge_cart(session_id: str = Query(..., description="Guest session ID"), user_id: str = Query(..., description="Logged-in user ID from verify-otp")):
+    """Merge guest cart into user cart after login. Call once after verify-otp with current session_id and returned user_id."""
+    merge_cart_into_user(session_id, user_id)
+    return {"message": "Cart merged", "success": True}
 
 
 @app.post("/home/coupon-game")
@@ -249,9 +301,9 @@ def validate_coupon_endpoint(code: str = Query(...), order_total: float = Query(
 
 
 @app.get("/session/{session_id}/context")
-def session_context(session_id: str):
-    """Debug: get current session context (events summary, cart, profile)."""
-    ctx = get_session_context(session_id)
+def session_context(session_id: str, user_id: str | None = Query(None, description="User ID when logged in")):
+    """Debug: get current session context (events summary, cart, profile). Uses user_id for cart/profile when provided."""
+    ctx = get_session_context(session_id, user_id)
     # Don't return full event payloads, just summary
     return {
         "cart_ids": ctx["cart_ids"],
@@ -264,8 +316,9 @@ def session_context(session_id: str):
 
 
 @app.get("/session/{session_id}/cart")
-def get_session_cart(session_id: str):
-    cart_ids = get_cart(session_id)
+def get_session_cart(session_id: str, user_id: str | None = Query(None, description="User ID when logged in")):
+    """Get cart. When user_id is provided (logged in), returns user's cart from DB identity."""
+    cart_ids = get_cart(session_id, user_id)
     products = []
     for pid in cart_ids:
         p = get_product(pid)
@@ -275,9 +328,9 @@ def get_session_cart(session_id: str):
 
 
 @app.post("/session/{session_id}/cart/clear")
-def clear_cart_endpoint(session_id: str):
-    """Clear all items from cart."""
-    clear_cart(session_id)
+def clear_cart_endpoint(session_id: str, user_id: str | None = Query(None, description="User ID when logged in")):
+    """Clear all items from cart. When user_id provided, clears user's cart."""
+    clear_cart(session_id, user_id)
     return {"message": "Cart cleared", "success": True}
 
 

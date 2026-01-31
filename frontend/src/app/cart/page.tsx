@@ -7,7 +7,7 @@ import { ShoppingBag, Trash2, ArrowLeft, Sparkles, ShoppingCart } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ProductCard } from "@/components/ProductCard";
-import { useCart } from "@/app/providers";
+import { useCart, useAuth } from "@/app/providers";
 import { getCart, fetchRecommendations, trackEvent } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 import { getProductImageSrc, getProductImagePlaceholder } from "@/lib/unsplash";
@@ -15,6 +15,8 @@ import type { Product } from "@/lib/api";
 
 export default function CartPage() {
   const { sessionId, refreshCart } = useCart();
+  const { user } = useAuth();
+  const userId = user?.user_id;
   const [cart, setCart] = useState<Product[]>([]);
   const [upsells, setUpsells] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,17 +25,18 @@ export default function CartPage() {
     trackEvent({
       event_type: "page_view",
       session_id: sessionId,
+      ...(userId ? { user_id: userId } : {}),
       metadata: { page: "cart" },
     });
-  }, [sessionId]);
+  }, [sessionId, userId]);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
       try {
         const [cartRes, recRes] = await Promise.all([
-          getCart(sessionId),
-          fetchRecommendations(sessionId, { limit: 4 }),
+          getCart(sessionId, userId),
+          fetchRecommendations(sessionId, { limit: 4, user_id: userId }),
         ]);
         setCart(cartRes.cart);
         const cartIds = cartRes.cart.map((p) => p.id);
@@ -51,7 +54,7 @@ export default function CartPage() {
       }
     }
     if (sessionId) load();
-  }, [sessionId]);
+  }, [sessionId, userId]);
 
   const total = cart.reduce((sum, p) => sum + p.price, 0);
 
@@ -60,19 +63,30 @@ export default function CartPage() {
       event_type: "cart_remove",
       session_id: sessionId,
       product_id: productId,
+      ...(userId ? { user_id: userId } : {}),
     });
     refreshCart();
-    const { cart: updated } = await getCart(sessionId);
+    const { cart: updated } = await getCart(sessionId, userId);
     setCart(updated);
   };
 
   const handleAddToCart = (productId: string) => {
-    trackEvent({ event_type: "cart_add", session_id: sessionId, product_id: productId });
+    trackEvent({
+      event_type: "cart_add",
+      session_id: sessionId,
+      product_id: productId,
+      ...(userId ? { user_id: userId } : {}),
+    });
     refreshCart();
   };
 
   const handleProductClick = (productId: string) => {
-    trackEvent({ event_type: "product_click", session_id: sessionId, product_id: productId });
+    trackEvent({
+      event_type: "product_click",
+      session_id: sessionId,
+      product_id: productId,
+      ...(userId ? { user_id: userId } : {}),
+    });
   };
 
   if (loading) {

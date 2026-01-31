@@ -46,7 +46,7 @@ type Profile = {
 export default function ProfilePage() {
   const { sessionId } = useCart();
   const { user: authUser } = useAuth();
-  const userId = sessionId;
+  const userId = authUser?.user_id ?? sessionId;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [editing, setEditing] = useState(false);

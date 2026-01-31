@@ -123,10 +123,11 @@ export async function trackEvent(payload: EventPayload): Promise<void> {
 
 export async function fetchRecommendations(
   sessionId: string,
-  opts?: { limit?: number; max_price?: number; category?: string; exclude_product_ids?: string }
+  opts?: { limit?: number; max_price?: number; category?: string; exclude_product_ids?: string; user_id?: string }
 ): Promise<{ recommendations: RecommendationItem[] }> {
   try {
     const search = new URLSearchParams({ session_id: sessionId });
+    if (opts?.user_id) search.set("user_id", opts.user_id);
     if (opts?.limit) search.set("limit", String(opts.limit));
     if (opts?.max_price != null) search.set("max_price", String(opts.max_price));
     if (opts?.category) search.set("category", opts.category);
@@ -155,13 +156,16 @@ export async function fetchRecommendations(
 export async function chat(
   sessionId: string,
   message: string,
-  history?: { role: string; content: string }[]
+  history?: { role: string; content: string }[],
+  user_id?: string
 ): Promise<{ content: string; product_ids: string[] }> {
   try {
+    const body: { session_id: string; message: string; history?: { role: string; content: string }[]; user_id?: string } = { session_id: sessionId, message, history };
+    if (user_id) body.user_id = user_id;
     const res = await fetch(`${API}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: sessionId, message, history }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error("Chat failed");
     return res.json();
@@ -187,13 +191,16 @@ export async function chatStream(
   sessionId: string,
   message: string,
   history: { role: string; content: string }[] | undefined,
-  callbacks: ChatStreamCallbacks
+  callbacks: ChatStreamCallbacks,
+  user_id?: string
 ): Promise<void> {
   try {
+    const body: { session_id: string; message: string; history: { role: string; content: string }[]; user_id?: string } = { session_id: sessionId, message, history: history ?? [] };
+    if (user_id) body.user_id = user_id;
     const res = await fetch(`${API}/chat/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: sessionId, message, history: history ?? [] }),
+      body: JSON.stringify(body),
     });
     if (!res.ok || !res.body) {
       callbacks.onDone([]);
@@ -233,9 +240,10 @@ export async function chatStream(
   }
 }
 
-export async function getCart(sessionId: string): Promise<{ cart: Product[] }> {
+export async function getCart(sessionId: string, userId?: string): Promise<{ cart: Product[] }> {
   try {
-    const res = await fetch(`${API}/session/${sessionId}/cart`);
+    const url = userId ? `${API}/session/${sessionId}/cart?user_id=${encodeURIComponent(userId)}` : `${API}/session/${sessionId}/cart`;
+    const res = await fetch(url);
     if (!res.ok) return { cart: [] };
     return res.json();
   } catch (e) {
@@ -244,11 +252,12 @@ export async function getCart(sessionId: string): Promise<{ cart: Product[] }> {
   }
 }
 
-export async function addToCart(sessionId: string, productId: string): Promise<void> {
+export async function addToCart(sessionId: string, productId: string, userId?: string): Promise<void> {
   await trackEvent({
     event_type: "cart_add",
     session_id: sessionId,
     product_id: productId,
+    ...(userId ? { user_id: userId } : {}),
   });
 }
 
@@ -268,7 +277,7 @@ export async function sendOtp(email: string): Promise<{ success: boolean; messag
 export async function verifyOtp(
   email: string,
   otp: string
-): Promise<{ success: boolean; email: string; name: string }> {
+): Promise<{ success: boolean; user_id: string; email: string; name: string }> {
   const res = await fetch(`${API}/auth/verify-otp`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -277,6 +286,14 @@ export async function verifyOtp(
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.detail || "Invalid or expired OTP");
   return data;
+}
+
+export async function mergeCart(sessionId: string, userId: string): Promise<{ success: boolean }> {
+  const res = await fetch(`${API}/auth/merge-cart?session_id=${encodeURIComponent(sessionId)}&user_id=${encodeURIComponent(userId)}`, {
+    method: "POST",
+  });
+  if (!res.ok) return { success: false };
+  return res.json().catch(() => ({ success: false }));
 }
 
 export async function removeFromCart(sessionId: string, productId: string): Promise<void> {

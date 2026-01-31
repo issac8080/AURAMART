@@ -44,13 +44,21 @@ def _get_product_collection():
         return _PRODUCT_COLLECTION
     try:
         import chromadb
+        from chromadb.config import Settings, DEFAULT_TENANT, DEFAULT_DATABASE
+        from chromadb.utils import embedding_functions
         persist_dir = str(Path(__file__).resolve().parent.parent / "data" / "chroma_products")
         Path(persist_dir).mkdir(parents=True, exist_ok=True)
-        _CHROMA_CLIENT = chromadb.PersistentClient(path=persist_dir)
-        # Use shared singleton embedding model (no per-call load)
+        _CHROMA_CLIENT = chromadb.PersistentClient(
+            path=persist_dir,
+            settings=Settings(anonymized_telemetry=False),
+            tenant=DEFAULT_TENANT,
+            database=DEFAULT_DATABASE,
+        )
+        # Use Chroma's built-in SentenceTransformer (has .name etc.; same model we used)
+        ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
         _PRODUCT_COLLECTION = _CHROMA_CLIENT.get_or_create_collection(
             name="products",
-            embedding_function=_embed_fn,
+            embedding_function=ef,
             metadata={"hnsw:space": "cosine"},
         )
         return _PRODUCT_COLLECTION

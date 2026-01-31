@@ -6,7 +6,7 @@ import { getCart } from "@/lib/api";
 
 const AURA_USER_KEY = "aura_user";
 
-export type AuthUser = { email: string; name: string };
+export type AuthUser = { email: string; name: string; user_id: string };
 
 type CartContextType = {
   cartCount: number;
@@ -16,7 +16,7 @@ type CartContextType = {
 
 type AuthContextType = {
   user: AuthUser | null;
-  login: (email: string, name: string) => void;
+  login: (email: string, name: string, user_id: string) => void;
   logout: () => void;
 };
 
@@ -29,7 +29,7 @@ function getStoredUser(): AuthUser | null {
     const raw = localStorage.getItem(AURA_USER_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw) as AuthUser;
-    return data?.email && data?.name ? data : null;
+    return data?.email && data?.name && data?.user_id ? data : null;
   } catch {
     return null;
   }
@@ -44,8 +44,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
     setUser(getStoredUser());
   }, []);
 
-  const login = useCallback((email: string, name: string) => {
-    const u = { email, name };
+  const login = useCallback((email: string, name: string, user_id: string) => {
+    const u = { email, name, user_id };
     setUser(u);
     try {
       localStorage.setItem(AURA_USER_KEY, JSON.stringify(u));
@@ -62,8 +62,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const refreshCart = useCallback(async () => {
     const sid = getSessionId();
     setSessionId(sid);
+    const uid = getStoredUser()?.user_id;
     try {
-      const { cart } = await getCart(sid);
+      const { cart } = await getCart(sid, uid ?? undefined);
       setCartCount(cart.length);
     } catch {
       setCartCount(0);
@@ -73,7 +74,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const sid = getSessionId();
     setSessionId(sid);
-    getCart(sid)
+    const uid = getStoredUser()?.user_id;
+    getCart(sid, uid ?? undefined)
       .then(({ cart }) => setCartCount(cart.length))
       .catch(() => setCartCount(0));
   }, []);

@@ -26,7 +26,7 @@ import { ProductCarousel } from "@/components/ProductCarousel";
 import { HomeSpinWheel } from "@/components/HomeSpinWheel";
 import { HomeJackpot } from "@/components/HomeJackpot";
 import { HomeScratch } from "@/components/HomeScratch";
-import { useCart } from "@/app/providers";
+import { useCart, useAuth } from "@/app/providers";
 import {
   fetchProducts,
   fetchRecommendations,
@@ -70,6 +70,8 @@ function getCategoryIcon(category: string): LucideIcon {
 
 export default function HomePage() {
   const { sessionId, refreshCart } = useCart();
+  const { user } = useAuth();
+  const userId = user?.user_id;
   const [recommended, setRecommended] = useState<Product[]>([]);
   const [trending, setTrending] = useState<Product[]>([]);
   const [premium, setPremium] = useState<Product[]>([]);
@@ -111,16 +113,22 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    trackEvent({ event_type: "page_view", session_id: sessionId, metadata: { page: "home" } });
-  }, [sessionId]);
+    trackEvent({
+      event_type: "page_view",
+      session_id: sessionId,
+      ...(userId ? { user_id: userId } : {}),
+      metadata: { page: "home" },
+    });
+  }, [sessionId, userId]);
 
   const loadAll = useCallback(async () => {
     try {
+      const actorId = userId ?? sessionId;
       const [recRes, productsRes, premiumRes, ordersRes] = await Promise.all([
-        sessionId ? fetchRecommendations(sessionId, { limit: 10 }) : Promise.resolve({ recommendations: [] }),
+        actorId ? fetchRecommendations(sessionId, { limit: 10, user_id: userId }) : Promise.resolve({ recommendations: [] }),
         fetchProducts({ limit: 20 }),
         fetchProducts({ min_price: 50000, limit: 10 }).catch(() => ({ products: [] })),
-        sessionId ? fetchUserOrders(sessionId).catch(() => ({ orders: [] })) : Promise.resolve({ orders: [] }),
+        actorId ? fetchUserOrders(actorId).catch(() => ({ orders: [] })) : Promise.resolve({ orders: [] }),
       ]);
       const recProducts = (recRes.recommendations || [])
         .map((r) => (r.product ? { ...r.product, id: r.product_id } as Product : null))
@@ -163,7 +171,7 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, userId]);
 
   useEffect(() => {
     loadAll();
@@ -192,12 +200,22 @@ export default function HomePage() {
   }, [categories]);
 
   const handleAddToCart = (productId: string) => {
-    trackEvent({ event_type: "cart_add", session_id: sessionId, product_id: productId });
+    trackEvent({
+      event_type: "cart_add",
+      session_id: sessionId,
+      product_id: productId,
+      ...(userId ? { user_id: userId } : {}),
+    });
     refreshCart();
   };
 
   const handleProductClick = (productId: string) => {
-    trackEvent({ event_type: "product_click", session_id: sessionId, product_id: productId });
+    trackEvent({
+      event_type: "product_click",
+      session_id: sessionId,
+      product_id: productId,
+      ...(userId ? { user_id: userId } : {}),
+    });
   };
 
   const playGame = async () => {

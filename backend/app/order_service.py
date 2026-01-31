@@ -111,7 +111,15 @@ def create_order(
         print(f"✓ Added pending AuraPoints for order {order_id}")
     except Exception as e:
         print(f"Failed to add pending points for order {order_id}: {e}")
-    
+
+    # Sync order to recommend DB so RAG/habits see it
+    try:
+        from app.db_sync import sync_order_to_recommend_db
+        if sync_order_to_recommend_db(order):
+            print(f"✓ Synced order {order_id} to recommend DB")
+    except Exception as e:
+        print(f"Failed to sync order to recommend DB: {e}")
+
     return order
 
 

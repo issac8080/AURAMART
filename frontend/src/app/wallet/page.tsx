@@ -7,7 +7,7 @@ import { Wallet as WalletIcon, TrendingUp, TrendingDown, Clock, Gift, ArrowLeft,
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useCart } from "@/app/providers";
+import { useCart, useAuth } from "@/app/providers";
 import { formatPrice } from "@/lib/utils";
 
 const API = "/api";
@@ -42,7 +42,8 @@ type Summary = {
 
 export default function WalletPage() {
   const { sessionId } = useCart();
-  const userId = sessionId;
+  const { user } = useAuth();
+  const userId = user?.user_id ?? sessionId;
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);

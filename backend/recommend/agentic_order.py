@@ -22,7 +22,7 @@ from recommend.rag_products import semantic_search_products, hybrid_search
 
 def resolve_items(product_quantities: List[Tuple[str, int]]) -> List[OrderItem]:
     """
-    Resolve (product_id, quantity) to OrderItem list using current prices from DB.
+    Resolve (product_id, quantity) to OrderItem list using current prices from recommend DB or app data_store.
     Skips products not found or out of stock.
     """
     session = get_session()
@@ -32,13 +32,17 @@ def resolve_items(product_quantities: List[Tuple[str, int]]) -> List[OrderItem]:
             if not pid or qty < 1:
                 continue
             p = session.query(Product).filter(Product.id == pid).first()
-            if not p:
+            if p and p.in_stock:
+                items.append(OrderItem(product_id=pid, quantity=qty, price=float(p.price)))
                 continue
-            if not p.in_stock:
-                continue
-            items.append(
-                OrderItem(product_id=pid, quantity=qty, price=float(p.price))
-            )
+            # Fallback: app data_store (products.json) so orders work when recommend DB is empty or out of sync
+            try:
+                from app.data_store import get_product
+                app_p = get_product(pid)
+                if app_p and getattr(app_p, "in_stock", True):
+                    items.append(OrderItem(product_id=pid, quantity=qty, price=float(app_p.price)))
+            except Exception:
+                pass
         return items
     finally:
         session.close()
@@ -202,6 +206,32 @@ def _extract_order_items(state: OrderAgentState) -> OrderAgentState:
     finally:
         session.close()
 
+    # 3) Fallback: if no candidates from Chroma (e.g. index empty), build catalog from DB or app products so LLM can still pick
+    if not catalog_lines:
+        try:
+            from app.data_store import load_products
+            products = load_products()
+            for p in products[:80]:
+                if p.id in candidate_ids:
+                    continue
+                candidate_ids.add(p.id)
+                catalog_lines.append(f"- {p.id}: {p.name} (₹{p.price}, {p.category})")
+                if len(catalog_lines) >= 40:
+                    break
+        except Exception:
+            pass
+    if not catalog_lines:
+        session = get_session()
+        try:
+            for p in session.query(Product).filter(Product.in_stock == True).limit(80).all():
+                if p.id in candidate_ids:
+                    continue
+                candidate_ids.add(p.id)
+                catalog_lines.append(f"- {p.id}: {p.name} (₹{p.price}, {p.category})")
+                if len(catalog_lines) >= 40:
+                    break
+        finally:
+            session.close()
     if not catalog_lines:
         return {"extracted_items": [], "error": "No matching products found for the message."}
 
@@ -246,7 +276,7 @@ Example: [{{"product_id": "P00001", "quantity": 2}}, {{"product_id": "P00002", "
 
 
 def _resolve_products(state: OrderAgentState) -> OrderAgentState:
-    """Resolve extracted_items to (product_id, quantity) using product_id or semantic search on description."""
+    """Resolve extracted_items to (product_id, quantity) using recommend DB or app data_store."""
     extracted = state.get("extracted_items") or []
     resolved = []
     session = get_session()
@@ -259,6 +289,15 @@ def _resolve_products(state: OrderAgentState) -> OrderAgentState:
                     p = session.query(Product).filter(Product.id == pid, Product.in_stock == True).first()
                     if p:
                         resolved.append((p.id, qty))
+                        continue
+                    # Fallback: app data_store so we can resolve when recommend DB is empty or out of sync
+                    try:
+                        from app.data_store import get_product
+                        app_p = get_product(pid)
+                        if app_p and getattr(app_p, "in_stock", True):
+                            resolved.append((pid, qty))
+                    except Exception:
+                        pass
                     continue
                 desc = item.get("description") or item.get("name") or ""
                 if not desc:
@@ -298,7 +337,7 @@ def _format_response(state: OrderAgentState) -> OrderAgentState:
         return {"response_message": "I didn't detect an order. Try: 'Order 2x P00001' or 'Buy a red shirt under ₹500'."}
     resolved = state.get("resolved_items") or []
     if not resolved:
-        return {"response_message": "I couldn't identify which products to order. Please mention product IDs (e.g. P00001) or clear product names."}
+        return {"response_message": "I searched the catalog but couldn't match your request to available products. Try describing what you want (e.g. 'a red shirt under ₹500', 'best phone under 20k') and I'll find and order it for you. You can also mention a product ID (e.g. P00001) if you know it."}
     return {"response_message": "Order could not be placed. Please try again."}
 
 

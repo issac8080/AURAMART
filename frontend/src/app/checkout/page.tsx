@@ -7,7 +7,8 @@ import { ShoppingBag, Home, Store, Check, ArrowLeft, Sparkles, Clock } from "luc
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useCart } from "@/app/providers";
+import { useCart, useAuth } from "@/app/providers";
+import { getCart } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 import Link from "next/link";
 
@@ -22,6 +23,8 @@ type Store = {
 export default function CheckoutPage() {
   const router = useRouter();
   const { sessionId } = useCart();
+  const { user } = useAuth();
+  const userId = user?.user_id ?? sessionId;
   const [cart, setCart] = useState<any[]>([]);
   const [deliveryMethod, setDeliveryMethod] = useState<"home_delivery" | "store_pickup">("home_delivery");
   const [stores, setStores] = useState<Store[]>([]);
@@ -37,9 +40,8 @@ export default function CheckoutPage() {
   useEffect(() => {
     async function loadCart() {
       try {
-        const res = await fetch(`${API}/session/${sessionId}/cart`);
-        const data = await res.json();
-        setCart(data.cart || []);
+        const { cart: cartData } = await getCart(sessionId, user?.user_id);
+        setCart(cartData || []);
       } catch {}
     }
     async function loadStores() {
@@ -54,7 +56,7 @@ export default function CheckoutPage() {
       loadCart();
       loadStores();
     }
-  }, [sessionId]);
+  }, [sessionId, user?.user_id]);
 
   useEffect(() => {
     async function previewCashback() {
@@ -90,7 +92,6 @@ export default function CheckoutPage() {
 
     setLoading(true);
     try {
-      const userId = sessionId; // In production, use actual user ID
       const res = await fetch(`${API}/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -105,11 +106,12 @@ export default function CheckoutPage() {
       });
       const order = await res.json();
       
-      // Clear cart after successful order
+      // Clear cart after successful order (use user_id when logged in)
       try {
-        await fetch(`${API}/session/${sessionId}/cart/clear`, {
-          method: "POST",
-        });
+        const clearUrl = user?.user_id
+          ? `${API}/session/${sessionId}/cart/clear?user_id=${encodeURIComponent(user.user_id)}`
+          : `${API}/session/${sessionId}/cart/clear`;
+        await fetch(clearUrl, { method: "POST" });
       } catch (e) {
         console.error("Failed to clear cart:", e);
       }

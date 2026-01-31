@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { formatPrice } from "@/lib/utils";
 import { getProductImageSrc, getProductImagePlaceholder } from "@/lib/unsplash";
-import { useCart } from "@/app/providers";
+import { useCart, useAuth } from "@/app/providers";
 import { chatStream, fetchProduct, addToCart, type Product } from "@/lib/api";
 
 const SUGGESTED = [
@@ -73,6 +73,8 @@ function MessageContent({ content, isStreaming }: { content: string; isStreaming
 
 export function ChatWidget() {
   const { sessionId, refreshCart } = useCart();
+  const { user } = useAuth();
+  const userId = user?.user_id;
   const [open, setOpen] = useState(false);
   type ChatMessage = { role: "user" | "assistant"; content: string; product_ids?: string[]; isStreaming?: boolean };
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -97,7 +99,7 @@ export function ChatWidget() {
     if (!sessionId || addingToCartId) return;
     setAddingToCartId(product.id);
     try {
-      await addToCart(sessionId, product.id);
+      await addToCart(sessionId, product.id, userId);
       await refreshCart();
       setAddedToCartMessage(`Added "${product.name}" to cart!`);
       setExpandedProductId(null);
@@ -160,7 +162,7 @@ export function ChatWidget() {
         });
         setLoading(false);
       },
-    });
+    }, userId);
   };
 
   return (
