@@ -112,9 +112,13 @@ export default function ProductsPage() {
     updateUrl({ min_rating: value || undefined });
   };
 
-  const handleAddToCart = (productId: string) => {
-    trackEvent({ event_type: "cart_add", session_id: sessionId, product_id: productId });
-    refreshCart();
+  const handleAddToCart = async (productId: string) => {
+    try {
+      await trackEvent({ event_type: "cart_add", session_id: sessionId, product_id: productId });
+      await refreshCart();
+    } catch (error) {
+      console.error("Failed to add to cart:", error);
+    }
   };
 
   const handleProductClick = (productId: string) => {

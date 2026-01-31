@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { Star, ShoppingCart, Sparkles } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,14 +37,8 @@ export function ProductCard({
   const badgeConfig = badge ? BADGE_CONFIG[badge] : null;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-      whileHover={{ y: -4, transition: { duration: 0.2 } }}
-      className="h-full"
-    >
-      <Card className="overflow-hidden group h-full flex flex-col rounded-2xl sm:rounded-3xl border border-border/80 bg-card shadow-card hover:shadow-card-hover hover:border-primary/25 transition-all duration-300">
+    <div className="h-full">
+      <Card className="overflow-hidden group h-full flex flex-col rounded-2xl sm:rounded-3xl border border-border/80 bg-card shadow-card hover:shadow-card-hover hover:border-primary/25 hover:-translate-y-1 transition-all duration-200">
         <Link href={`/products/${product.id}`} onClick={handleClick} className="block">
           <div className="aspect-square bg-muted/50 relative overflow-hidden">
             <img
@@ -99,6 +92,6 @@ export function ProductCard({
           </Button>
         </CardFooter>
       </Card>
-    </motion.div>
+    </div>
   );
 }

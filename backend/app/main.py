@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from app.config import CORS_ORIGINS
 from app.models import (
     EventPayload,
@@ -406,9 +407,17 @@ def get_user_order_list(user_id: str):
     return {"orders": [o.model_dump() for o in orders]}
 
 
+class UpdateStatusRequest(BaseModel):
+    status: str
+
 @app.post("/orders/{order_id}/status")
-def update_order_status_endpoint(order_id: str, status: OrderStatus):
+def update_order_status_endpoint(order_id: str, request: UpdateStatusRequest):
     """Update order status (admin/store use)."""
+    try:
+        status = OrderStatus(request.status)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {request.status}")
+    
     order = update_order_status(order_id, status)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -649,3 +658,16 @@ def simulate_price_drop_endpoint(product_id: str = Query(...), new_price: float 
     if not ok:
         raise HTTPException(status_code=404, detail="Product not found")
     return {"ok": True, "product_id": product_id, "new_price": new_price}
+
+
+# ==================== RETURN & EXCHANGE MODULE ====================
+# Integrated from old return system - Authentication removed for autonomous operation
+
+try:
+    from app.returns.routes import router as returns_router
+    app.include_router(returns_router)
+    print("[OK] Return & Exchange module loaded successfully")
+except ImportError as e:
+    print(f"[WARN] Return & Exchange module not available: {e}")
+except Exception as e:
+    print(f"[ERROR] Error loading Return & Exchange module: {e}")

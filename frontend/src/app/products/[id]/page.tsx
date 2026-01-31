@@ -162,9 +162,13 @@ export default function ProductDetailPage() {
           <Button
             size="lg"
             className="w-full sm:w-auto"
-            onClick={() => {
-              trackEvent({ event_type: "cart_add", session_id: sessionId, product_id: product.id });
-              refreshCart();
+            onClick={async () => {
+              try {
+                await trackEvent({ event_type: "cart_add", session_id: sessionId, product_id: product.id });
+                await refreshCart();
+              } catch (error) {
+                console.error("Failed to add to cart:", error);
+              }
             }}
           >
             <ShoppingCart className="h-5 w-5 mr-2" />

@@ -5,7 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Package, Store, Home, Check, Clock, Truck, ArrowLeft, X, Gift, Sparkles } from "lucide-react";
+import { Package, Store, Home, Check, Clock, Truck, ArrowLeft, X, Gift, Sparkles, RefreshCw, CheckCheck, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +48,7 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
+  const [markingDelivered, setMarkingDelivered] = useState(false);
   const [cashbackInfo, setCashbackInfo] = useState<{ amount: number; rate: string } | null>(null);
   const [spinOpen, setSpinOpen] = useState(false);
 
@@ -108,6 +109,42 @@ export default function OrderDetailPage() {
     }
   };
 
+  const handleMarkDelivered = async () => {
+    if (!confirm("Mark this order as delivered? (Demo purpose)\n\nThis will:\n✓ Change status to 'delivered'\n✓ Enable Return/Exchange option\n✓ Credit AuraPoints to wallet")) return;
+    setMarkingDelivered(true);
+    try {
+      const res = await fetch(`${API}/orders/${orderId}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "delivered" })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setOrder(updated);
+        
+        // Preview AuraPoints
+        try {
+          const cashbackRes = await fetch(`${API}/wallet/preview-cashback?order_total=${updated.total}`);
+          if (cashbackRes.ok) {
+            const cashbackData = await cashbackRes.json();
+            setCashbackInfo({
+              amount: cashbackData.points_amount || cashbackData.cashback_amount,
+              rate: cashbackData.points_rate || cashbackData.cashback_rate,
+            });
+          }
+        } catch {}
+        
+        alert("✓ Order marked as delivered!\n✓ AuraPoints will be credited\n✓ Return option now available");
+      } else {
+        alert("Failed to update order status");
+      }
+    } catch {
+      alert("Failed to update order status");
+    } finally {
+      setMarkingDelivered(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="py-12 text-center">
@@ -146,6 +183,36 @@ export default function OrderDetailPage() {
           <p className="text-muted-foreground">Order #{order.id}</p>
         </div>
       </div>
+
+      {/* AuraPoints Info Banner */}
+      {order.status !== "cancelled" && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4"
+        >
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
+              <Sparkles className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-purple-900 dark:text-purple-100 mb-1">
+                AuraPoints Rewards
+              </h3>
+              <div className="text-sm text-purple-700 dark:text-purple-300 space-y-1">
+                <p>✓ Earn up to 5% AuraPoints when order is delivered</p>
+                <p>✓ Points credited automatically to your wallet</p>
+                <p>✓ Valid for 30 days from delivery</p>
+                {(order.status === "delivered" || order.status === "picked_up") && (
+                  <p className="font-medium text-emerald-600 dark:text-emerald-400 mt-2">
+                    ✓ If you return this order, AuraPoints will be deducted from your wallet
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       <div className="grid md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-6">
@@ -302,17 +369,46 @@ export default function OrderDetailPage() {
               <div className="text-xs text-muted-foreground">
                 <p>Order placed: {new Date(order.created_at).toLocaleString()}</p>
               </div>
-              {order.status !== "cancelled" && order.status !== "delivered" && order.status !== "picked_up" && (
-                <Button
-                  variant="destructive"
-                  className="w-full mt-4 bg-red-600 hover:bg-red-700 text-white"
-                  onClick={handleCancelOrder}
-                  disabled={cancelling}
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  {cancelling ? "Cancelling..." : "Cancel Order"}
-                </Button>
-              )}
+              <div className="space-y-2">
+                {/* Demo: Mark as Delivered Button */}
+                {order.status !== "cancelled" && order.status !== "delivered" && order.status !== "picked_up" && (
+                  <Button
+                    variant="default"
+                    className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={handleMarkDelivered}
+                    disabled={markingDelivered}
+                  >
+                    <CheckCheck className="h-4 w-4 mr-2" />
+                    {markingDelivered ? "Marking..." : "Mark as Delivered (Demo)"}
+                  </Button>
+                )}
+                
+                {/* Return / Exchange Button */}
+                {(order.status === "delivered" || order.status === "picked_up") && (
+                  <Link href={`/returns/create?orderId=${order.id}`}>
+                    <Button
+                      variant="outline"
+                      className="w-full border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Return / Exchange
+                    </Button>
+                  </Link>
+                )}
+                
+                {/* Cancel Order Button */}
+                {order.status !== "cancelled" && order.status !== "delivered" && order.status !== "picked_up" && (
+                  <Button
+                    variant="destructive"
+                    className="w-full bg-red-600 hover:bg-red-700 text-white"
+                    onClick={handleCancelOrder}
+                    disabled={cancelling}
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    {cancelling ? "Cancelling..." : "Cancel Order"}
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
