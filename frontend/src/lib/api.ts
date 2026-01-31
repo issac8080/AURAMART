@@ -85,7 +85,7 @@ export async function fetchProducts(params?: {
     if (!res.ok) throw new Error("Failed to fetch products");
     return res.json();
   } catch (e) {
-    if (isNetworkError(e)) {
+    if (isNetworkError(e) || (e instanceof Error && e.message === "Failed to fetch products")) {
       const { getFallbackProducts } = await import("./fallback-products");
       return { products: getFallbackProducts(params) };
     }
@@ -166,13 +166,70 @@ export async function chat(
     if (!res.ok) throw new Error("Chat failed");
     return res.json();
   } catch (e) {
-    if (isNetworkError(e)) {
+    if (isNetworkError(e) || (e instanceof Error && e.message === "Chat failed")) {
       return {
-        content: "The backend API isn’t running, so I can’t answer right now. Start it with: cd backend && uvicorn app.main:app --reload --port 8000",
+        content: "The backend API isn’t running or had an error. Start it with: cd backend && uvicorn app.main:app --reload --port 8000",
         product_ids: [],
       };
     }
     throw e;
+  }
+}
+
+export type ChatStreamCallbacks = {
+  onChunk: (content: string) => void;
+  onDone: (productIds: string[]) => void;
+  onError?: (err: Error) => void;
+};
+
+/** Stream chat response (SSE) for a generative-AI feel. Calls onChunk for each token, onDone with product_ids. */
+export async function chatStream(
+  sessionId: string,
+  message: string,
+  history: { role: string; content: string }[] | undefined,
+  callbacks: ChatStreamCallbacks
+): Promise<void> {
+  try {
+    const res = await fetch(`${API}/chat/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId, message, history: history ?? [] }),
+    });
+    if (!res.ok || !res.body) {
+      callbacks.onDone([]);
+      if (res.status >= 400) callbacks.onError?.(new Error("Chat stream failed"));
+      return;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    const productIds: string[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(line.slice(6)) as { content?: string; done?: boolean; product_ids?: string[] };
+            if (data.content != null) callbacks.onChunk(data.content);
+            if (data.done === true && Array.isArray(data.product_ids)) {
+              productIds.push(...data.product_ids);
+              callbacks.onDone(productIds);
+              return;
+            }
+          } catch {
+            // skip malformed line
+          }
+        }
+      }
+    }
+    callbacks.onDone(productIds);
+  } catch (e) {
+    callbacks.onError?.(e instanceof Error ? e : new Error(String(e)));
+    callbacks.onDone([]);
   }
 }
 
@@ -195,10 +252,97 @@ export async function addToCart(sessionId: string, productId: string): Promise<v
   });
 }
 
+/** Send OTP to email – OTP is printed in the backend terminal. */
+export async function sendOtp(email: string): Promise<{ success: boolean; message?: string }> {
+  const res = await fetch(`${API}/auth/send-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: email.trim().toLowerCase() }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || "Failed to send OTP");
+  return data;
+}
+
+/** Verify OTP and get user info for login. */
+export async function verifyOtp(
+  email: string,
+  otp: string
+): Promise<{ success: boolean; email: string; name: string }> {
+  const res = await fetch(`${API}/auth/verify-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: email.trim().toLowerCase(), otp: otp.trim() }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || "Invalid or expired OTP");
+  return data;
+}
+
 export async function removeFromCart(sessionId: string, productId: string): Promise<void> {
   await trackEvent({
     event_type: "cart_remove",
     session_id: sessionId,
     product_id: productId,
   });
+}
+
+export type Order = {
+  id: string;
+  user_id: string;
+  items: Array<{ product_id: string; quantity: number; price: number }>;
+  total: number;
+  delivery_method: string;
+  status: string;
+  created_at: string;
+};
+
+export async function fetchUserOrders(userId: string): Promise<{ orders: Order[] }> {
+  try {
+    const res = await fetch(`${API}/users/${userId}/orders`);
+    if (!res.ok) return { orders: [] };
+    return res.json();
+  } catch (e) {
+    if (isNetworkError(e)) return { orders: [] };
+    throw e;
+  }
+}
+
+export type CouponGameResult = {
+  played: boolean;
+  won: boolean;
+  code: string | null;
+  min_order: number;
+  discount: number;
+  message: string;
+};
+
+export async function playCouponGame(sessionId: string): Promise<CouponGameResult> {
+  const res = await fetch(`${API}/home/coupon-game`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+  if (!res.ok) throw new Error("Failed to play");
+  return res.json();
+}
+
+export async function playJackpot(sessionId: string): Promise<CouponGameResult> {
+  const res = await fetch(`${API}/home/jackpot`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+  if (!res.ok) throw new Error("Failed to play");
+  return res.json();
+}
+
+export async function playScratch(sessionId: string): Promise<CouponGameResult> {
+  const res = await fetch(`${API}/home/scratch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+  if (!res.ok) throw new Error("Failed to play");
+  return res.json();
 }

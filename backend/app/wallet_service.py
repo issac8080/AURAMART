@@ -1,14 +1,22 @@
 """
 Aura Wallet Service - AuraPoints rewards system.
 Customers earn 5-7% AuraPoints on purchases, valid for 1 month.
+Spin wheel / scratch reward after order: 0, 1, 2, 3, or 10 points (weighted).
 """
+import random
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from app.models import Wallet, WalletTransaction
 
 # In-memory wallet storage
 _wallets: Dict[str, Wallet] = {}
+
+# Orders that already used their spin (one spin per order)
+_spin_used_order_ids: set = set()
+
+# Orders whose rewards were already revoked (on cancel)
+_revoked_order_ids: set = set()
 
 # AuraPoints percentage (5-7% based on order value)
 AURAPOINTS_RATE_LOW = 0.05  # 5% for orders under ₹1000
@@ -277,3 +285,103 @@ def get_recent_transactions(user_id: str, limit: int = 10) -> List[WalletTransac
     """Get recent wallet transactions."""
     wallet = get_wallet(user_id)
     return sorted(wallet.transactions, key=lambda t: t.created_at, reverse=True)[:limit]
+
+
+# Spin wheel outcomes: (points, weight). Most often 0 or 2.
+SPIN_OUTCOMES: List[Tuple[int, int]] = [
+    (0, 40),   # Better luck next time
+    (2, 35),   # 2 points (common)
+    (1, 10),
+    (3, 10),
+    (10, 5),   # Jackpot
+]
+
+
+def spin_wheel_result() -> int:
+    """Return points won: 0, 1, 2, 3, or 10 (weighted)."""
+    values = [x[0] for x in SPIN_OUTCOMES]
+    weights = [x[1] for x in SPIN_OUTCOMES]
+    return random.choices(values, weights=weights, k=1)[0]
+
+
+def is_spin_used(order_id: str) -> bool:
+    """Check if this order already used its spin."""
+    return order_id in _spin_used_order_ids
+
+
+def add_spin_reward(user_id: str, order_id: str, points_won: int) -> Optional[WalletTransaction]:
+    """
+    Credit spin wheel / scratch reward to wallet. One spin per order.
+    Returns transaction if credited, None if points_won is 0 or already used.
+    """
+    if order_id in _spin_used_order_ids:
+        return None
+    _spin_used_order_ids.add(order_id)
+
+    if points_won <= 0:
+        return None
+
+    wallet = get_wallet(user_id)
+    now = datetime.utcnow()
+
+    transaction = WalletTransaction(
+        id=f"TXN-{uuid.uuid4().hex[:8].upper()}",
+        user_id=user_id,
+        amount=float(points_won),
+        type="credit",
+        source="spin_reward",
+        order_id=order_id,
+        description=f"Spin the wheel reward – {points_won} AuraPoints (order {order_id})",
+        status="active",
+        created_at=now.isoformat(),
+        is_expired=False,
+    )
+
+    wallet.balance += points_won
+    wallet.total_earned += points_won
+    wallet.transactions.append(transaction)
+    _wallets[user_id] = wallet
+
+    return transaction
+
+
+def revoke_order_rewards(user_id: str, order_id: str) -> float:
+    """
+    When an order is cancelled, revoke all points from that order:
+    - Spin wheel rewards
+    - AuraPoints (delivery cashback, pending or already activated)
+    Returns the total amount revoked. Idempotent: only revokes once per order.
+    """
+    if order_id in _revoked_order_ids:
+        return 0.0
+    wallet = get_wallet(user_id)
+    total_revoke = 0.0
+    for txn in wallet.transactions:
+        if txn.order_id != order_id or txn.type != "credit":
+            continue
+        if txn.source == "spin_reward":
+            total_revoke += txn.amount
+        elif txn.source == "aurapoints" and txn.status == "active":
+            total_revoke += txn.amount
+        elif txn.source == "aurapoints" and txn.status == "pending":
+            txn.status = "cancelled"
+    if total_revoke <= 0:
+        _revoked_order_ids.add(order_id)
+        return 0.0
+    now = datetime.utcnow()
+    revoke_txn = WalletTransaction(
+        id=f"TXN-{uuid.uuid4().hex[:8].upper()}",
+        user_id=user_id,
+        amount=total_revoke,
+        type="debit",
+        source="order_cancel_revoke",
+        order_id=order_id,
+        description=f"Points revoked – order {order_id} cancelled",
+        status="active",
+        created_at=now.isoformat(),
+    )
+    wallet.balance = max(0.0, wallet.balance - total_revoke)
+    wallet.transactions.append(revoke_txn)
+    _wallets[user_id] = wallet
+    _revoked_order_ids.add(order_id)
+    return total_revoke

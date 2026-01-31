@@ -3,14 +3,13 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageCircle, X, Send, Loader2, Sparkles, ShoppingBag, Star, ShoppingCart, ChevronDown } from "lucide-react";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { formatPrice } from "@/lib/utils";
-import { getProductImage } from "@/lib/unsplash";
+import { getProductImageSrc, getProductImagePlaceholder } from "@/lib/unsplash";
 import { useCart } from "@/app/providers";
-import { chat, fetchProduct, addToCart, type Product } from "@/lib/api";
+import { chatStream, fetchProduct, addToCart, type Product } from "@/lib/api";
 
 const SUGGESTED = [
   "Show trending products",
@@ -21,31 +20,65 @@ const SUGGESTED = [
   "What's in my cart?",
 ];
 
-// Render message with **bold** support
-function MessageContent({ content }: { content: string }) {
-  const parts = content.split(/(\*\*[^*]+\*\*)/g);
+// Follow-up suggestions shown after assistant messages (generative-AI style)
+const FOLLOW_UPS: Record<string, string[]> = {
+  default: [
+    "Show more like this",
+    "What's in my cart?",
+    "Best under ₹3000",
+    "Tell me about AuraPoints",
+  ],
+  cart: ["Checkout", "Show recommendations", "Clear cart"],
+  products: ["Add to cart", "Show similar", "Filter by price"],
+};
+
+// Rich message content: **bold**, lists, links, code
+function MessageContent({ content, isStreaming }: { content: string; isStreaming?: boolean }) {
+  const lines = content.split("\n");
   return (
-    <p className="whitespace-pre-wrap text-fluid-sm leading-relaxed">
-      {parts.map((part, i) =>
-        part.startsWith("**") && part.endsWith("**") ? (
-          <strong key={i} className="font-semibold text-foreground">
-            {part.slice(2, -2)}
-          </strong>
-        ) : (
-          <span key={i}>{part}</span>
-        )
+    <div className="whitespace-pre-wrap text-sm leading-relaxed space-y-1.5">
+      {lines.map((line, i) => {
+        const trimmed = line.trim();
+        const bullet = /^[-*•]\s+/.exec(trimmed);
+        const boldParts = trimmed.split(/(\*\*[^*]+\*\*)/g);
+        const rendered = (
+          <span key={i}>
+            {boldParts.map((part, j) =>
+              part.startsWith("**") && part.endsWith("**") ? (
+                <strong key={j} className="font-semibold text-foreground">
+                  {part.slice(2, -2)}
+                </strong>
+              ) : (
+                <span key={j}>{part}</span>
+              )
+            )}
+          </span>
+        );
+        if (bullet) {
+          return (
+            <div key={i} className="flex gap-2">
+              <span className="text-primary shrink-0">•</span>
+              {rendered}
+            </div>
+          );
+        }
+        return <div key={i}>{rendered}</div>;
+      })}
+      {isStreaming && (
+        <span className="inline-block w-2 h-4 ml-0.5 bg-primary/80 animate-pulse align-middle" aria-hidden />
       )}
-    </p>
+    </div>
   );
 }
 
 export function ChatWidget() {
   const { sessionId, refreshCart } = useCart();
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string; product_ids?: string[] }[]>([
+  type ChatMessage = { role: "user" | "assistant"; content: string; product_ids?: string[]; isStreaming?: boolean };
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
-      content: "Hi! ✨ I'm your AuraShop AI assistant. I can help you **search products**, **check your cart**, **track orders**, and **manage your wallet**. What would you like to do?",
+      content: "Hi! I'm your AuraShop assistant. I can help you search products, check your cart, track orders, and manage your wallet. Pick an option below or type your question.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -81,37 +114,53 @@ export function ChatWidget() {
     const msg = text.trim();
     if (!msg || loading) return;
     setInput("");
-    setMessages((m) => [...m, { role: "user", content: msg }]);
+    setMessages((m) => [...m, { role: "user", content: msg }, { role: "assistant", content: "", product_ids: [], isStreaming: true }]);
     setLoading(true);
-    try {
-      const history = messages.slice(-8).map((m) => ({ role: m.role, content: m.content }));
-      const res = await chat(sessionId || "", msg, history);
-      setMessages((m) => [
-        ...m,
-        { role: "assistant", content: res.content, product_ids: res.product_ids },
-      ]);
-      if (res.product_ids?.length) {
-        const seen = { ...productsInChat };
-        for (const id of res.product_ids) {
-          if (!seen[id]) {
-            try {
-              const p = await fetchProduct(id);
-              seen[id] = p;
-            } catch {
-              // ignore
+    const history = messages.slice(-8).map((m) => ({ role: m.role, content: m.content }));
+
+    await chatStream(sessionId || "", msg, history, {
+      onChunk: (chunk) => {
+        setMessages((m) => {
+          const idx = m.findIndex((x) => x.role === "assistant" && x.isStreaming);
+          if (idx < 0) return m;
+          const next = [...m];
+          next[idx] = { ...next[idx], content: next[idx].content + chunk };
+          return next;
+        });
+      },
+      onDone: (productIds) => {
+        setMessages((m) => {
+          const idx = m.findIndex((x) => x.role === "assistant" && x.isStreaming);
+          if (idx < 0) return m;
+          const next = [...m];
+          next[idx] = { role: "assistant", content: next[idx].content, product_ids: productIds, isStreaming: false };
+          return next;
+        });
+        setLoading(false);
+        if (productIds?.length) {
+          productIds.forEach((id) => {
+            if (!productsInChat[id]) {
+              fetchProduct(id).then((p) => setProductsInChat((prev) => ({ ...prev, [id]: p }))).catch(() => {});
             }
-          }
+          });
         }
-        setProductsInChat(seen);
-      }
-    } catch {
-      setMessages((m) => [
-        ...m,
-        { role: "assistant", content: "Sorry, I couldn't process that. Please try again." },
-      ]);
-    } finally {
-      setLoading(false);
-    }
+      },
+      onError: () => {
+        setMessages((m) => {
+          const idx = m.findIndex((x) => x.role === "assistant" && x.isStreaming);
+          if (idx < 0) return m;
+          const next = [...m];
+          next[idx] = {
+            role: "assistant",
+            content: "Sorry, I couldn't reach the server. Make sure the backend is running (port 8000).",
+            product_ids: [],
+            isStreaming: false,
+          };
+          return next;
+        });
+        setLoading(false);
+      },
+    });
   };
 
   return (
@@ -123,7 +172,7 @@ export function ChatWidget() {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 20 }}
             transition={{ type: "spring", damping: 28, stiffness: 320 }}
-            className="fixed bottom-20 right-4 sm:right-6 z-50 w-[calc(100vw-2rem)] sm:w-[420px] max-w-[calc(100vw-2rem)] h-[min(85vh,620px)] sm:h-[580px] rounded-2xl sm:rounded-3xl glass-card flex flex-col overflow-hidden glow-ai"
+            className="fixed bottom-20 right-4 sm:right-6 z-50 w-[calc(100vw-2rem)] sm:w-[420px] max-w-[calc(100vw-2rem)] h-[min(85vh,620px)] sm:h-[580px] rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shadow-xl flex flex-col overflow-hidden"
           >
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-white/20 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-blue-500/10">
@@ -170,7 +219,23 @@ export function ChatWidget() {
                           : "glass-card rounded-bl-md text-foreground border-indigo-500/20 shadow-glow"
                       )}
                     >
-                      <MessageContent content={m.content} />
+                      <MessageContent content={m.content} isStreaming={m.isStreaming} />
+                      {m.role === "assistant" && !m.isStreaming && m.content && (
+                        <div className="flex flex-wrap gap-1.5 mt-3">
+                          {(FOLLOW_UPS.default.slice(0, 3)).map((s) => (
+                            <motion.button
+                              key={s}
+                              type="button"
+                              onClick={() => send(s)}
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                              className="text-xs rounded-full border border-indigo-300/50 dark:border-indigo-600/50 bg-indigo-50/50 dark:bg-indigo-950/30 px-2.5 py-1 hover:bg-indigo-100/80 dark:hover:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-medium transition-colors"
+                            >
+                              {s}
+                            </motion.button>
+                          ))}
+                        </div>
+                      )}
                       {m.role === "assistant" && m.product_ids?.length ? (
                         <div className="mt-4 flex gap-3 overflow-x-auto pb-1 -mx-1 scrollbar-thin">
                           {m.product_ids.slice(0, 4).map((id, idx) => {
@@ -192,15 +257,17 @@ export function ChatWidget() {
                                 <button
                                   type="button"
                                   onClick={() => setExpandedProductId(expandedProductId === id ? null : id)}
-                                  className="flex flex-col rounded-xl border-2 border-border/80 bg-background overflow-hidden w-[160px] flex-shrink-0 hover:border-primary hover:shadow-lg hover:shadow-primary/10 transition-all duration-200 group text-left"
+                                  className="flex flex-col rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden w-[160px] flex-shrink-0 hover:border-indigo-400 dark:hover:border-indigo-600 hover:shadow-md transition-all duration-200 group text-left"
                                 >
                                   <div className="relative h-28 w-full bg-muted overflow-hidden">
-                                    <Image
-                                      src={getProductImage(p.category, p.id)}
+                                    <img
+                                      src={getProductImageSrc(p.image_url, p.category, p.id, p.name)}
                                       alt={p.name}
-                                      fill
-                                      className="object-cover group-hover:scale-105 transition-transform duration-300"
-                                      sizes="160px"
+                                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                      loading="lazy"
+                                      onError={(e) => {
+                                        e.currentTarget.src = getProductImagePlaceholder(p.name);
+                                      }}
                                     />
                                     <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-full bg-black/50 px-1.5 py-0.5 text-xs text-white">
                                       <Star className="h-3 w-3 fill-current" />
@@ -226,26 +293,22 @@ export function ChatWidget() {
                     </div>
                   </motion.div>
                 ))}
-                {loading && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="flex justify-start"
-                  >
-                    <div className="rounded-2xl rounded-bl-md bg-card border border-border/80 px-4 py-3 flex items-center gap-2">
+                {loading && !messages.some((m) => m.isStreaming) && (
+                  <div className="flex justify-start">
+                    <div className="rounded-2xl rounded-bl-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center gap-2">
                       <div className="flex gap-1">
                         {[0, 1, 2].map((i) => (
                           <motion.span
                             key={i}
-                            className="h-2 w-2 rounded-full bg-primary/60"
-                            animate={{ scale: [1, 1.3, 1], opacity: [0.5, 1, 0.5] }}
-                            transition={{ repeat: Infinity, duration: 0.8, delay: i * 0.15 }}
+                            className="h-2 w-2 rounded-full bg-indigo-500"
+                            animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+                            transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.12 }}
                           />
                         ))}
                       </div>
-                      <span className="text-xs text-muted-foreground">Thinking...</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Thinking...</span>
                     </div>
-                  </motion.div>
+                  </div>
                 )}
               </div>
             </div>
@@ -262,13 +325,18 @@ export function ChatWidget() {
                 >
                   <div className="p-4 flex gap-4">
                     <div className="relative w-24 h-24 rounded-xl bg-muted flex-shrink-0 overflow-hidden">
-                      <Image
-                        src={getProductImage(productsInChat[expandedProductId].category, productsInChat[expandedProductId].id)}
+                      <img
+                        src={getProductImageSrc(
+                          productsInChat[expandedProductId].image_url,
+                          productsInChat[expandedProductId].category,
+                          productsInChat[expandedProductId].id,
+                          productsInChat[expandedProductId].name
+                        )}
                         alt={productsInChat[expandedProductId].name}
-                        fill
-                        unoptimized
-                        className="object-cover"
-                        sizes="96px"
+                        className="absolute inset-0 w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = getProductImagePlaceholder(productsInChat[expandedProductId].name);
+                        }}
                       />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -306,52 +374,54 @@ export function ChatWidget() {
               )}
             </AnimatePresence>
 
-            {/* Added to cart toast (in-chat only) */}
+            {/* Added to cart toast */}
             <AnimatePresence>
               {addedToCartMessage && (
                 <motion.div
-                  initial={{ opacity: 0, y: 8 }}
+                  initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 8 }}
-                  className="px-3 py-2 mx-3 mt-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-sm font-medium text-center"
+                  exit={{ opacity: 0, y: 4 }}
+                  className="mx-4 mb-2 py-2.5 px-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-sm font-medium text-center"
                 >
                   {addedToCartMessage}
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Input + Suggested */}
-            <div className="p-3 border-t bg-card/80 backdrop-blur-sm">
+            {/* Suggested options (above input) + Ask box */}
+            <div className="p-4 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950/80">
+              <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2.5">
+                Quick options
+              </p>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {SUGGESTED.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => send(s)}
+                    disabled={loading}
+                    className="text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/80 px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-indigo-300 dark:hover:border-indigo-700 text-gray-700 dark:text-gray-300 font-medium transition-colors disabled:opacity-50"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
               <div className="flex gap-2">
                 <Input
-                  placeholder="Ask anything—search, cart, wallet..."
+                  placeholder="Type your question..."
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && send(input)}
-                  className="flex-1 rounded-xl border-2 focus:border-primary/50 bg-background"
+                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send(input)}
+                  className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 text-sm"
                 />
                 <Button
                   size="icon"
                   onClick={() => send(input)}
                   disabled={loading}
-                  className="rounded-xl bg-gradient-to-br from-primary to-purple-600 hover:opacity-90 shadow-lg"
+                  className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shrink-0"
                 >
                   <Send className="h-4 w-4" />
                 </Button>
-              </div>
-              <div className="flex flex-wrap gap-2 mt-3">
-                {SUGGESTED.map((s, i) => (
-                  <motion.button
-                    key={s}
-                    type="button"
-                    onClick={() => send(s)}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="text-xs rounded-full border-2 border-primary/20 bg-gradient-to-r from-primary/5 to-purple-500/5 px-3 py-1.5 hover:border-primary/40 hover:from-primary/10 hover:to-purple-500/10 transition-colors font-medium text-foreground/90"
-                  >
-                    {s}
-                  </motion.button>
-                ))}
               </div>
             </div>
           </motion.div>

@@ -31,11 +31,25 @@ def load_products() -> List[Product]:
     global _products, _products_by_id
     if _products:
         return _products
-    with open(PRODUCTS_PATH, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    _products = [Product(**p) for p in data]
-    _products_by_id = {p.id: p for p in _products}
-    return _products
+    try:
+        if not PRODUCTS_PATH.exists():
+            return _products
+        with open(PRODUCTS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, list):
+            data = []
+        _products = []
+        for p in data:
+            try:
+                _products.append(Product(**p))
+            except Exception:
+                continue
+        _products_by_id = {p.id: p for p in _products}
+        return _products
+    except Exception:
+        _products = []
+        _products_by_id = {}
+        return _products
 
 
 def get_product(product_id: str) -> Optional[Product]:

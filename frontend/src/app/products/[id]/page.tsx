@@ -12,6 +12,7 @@ import { useCart } from "@/app/providers";
 import { fetchProduct, fetchRecommendations, trackEvent } from "@/lib/api";
 import { recordProductView } from "@/discountFrontend/api";
 import { formatPrice } from "@/lib/utils";
+import { getProductImageSrc, getProductImagePlaceholder } from "@/lib/unsplash";
 import type { Product } from "@/lib/api";
 
 export default function ProductDetailPage() {
@@ -120,20 +121,15 @@ export default function ProductDetailPage() {
         animate={{ opacity: 1, y: 0 }}
         className="grid md:grid-cols-2 gap-8"
       >
-        <div className="aspect-square rounded-xl bg-muted overflow-hidden">
-          <div
-            className="w-full h-full bg-gradient-to-br from-primary/10 to-accent/20"
-            style={{
-              backgroundImage: product.image_url ? `url(${product.image_url})` : undefined,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
+        <div className="aspect-square rounded-xl bg-muted overflow-hidden relative">
+          <img
+            src={getProductImageSrc(product.image_url, product.category, product.id, product.name)}
+            alt={product.name}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              e.currentTarget.src = getProductImagePlaceholder(product.name);
             }}
           />
-          {!product.image_url && (
-            <div className="w-full h-full flex items-center justify-center font-heading text-fluid-4xl sm:text-fluid-5xl font-bold text-muted-foreground/30">
-              {product.name.slice(0, 1)}
-            </div>
-          )}
         </div>
 
         <div className="space-y-4">

@@ -1,14 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { motion } from "framer-motion";
 import { Star, ShoppingCart, Sparkles } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatPrice } from "@/lib/utils";
-import { getProductImage } from "@/lib/unsplash";
+import { getProductImageSrc, getProductImagePlaceholder } from "@/lib/unsplash";
 import type { Product } from "@/lib/api";
 
 type BadgeType = "best_match" | "value" | "trending" | null;
@@ -49,13 +48,14 @@ export function ProductCard({
       <Card className="overflow-hidden group h-full flex flex-col rounded-2xl sm:rounded-3xl border border-border/80 bg-card shadow-card hover:shadow-card-hover hover:border-primary/25 transition-all duration-300">
         <Link href={`/products/${product.id}`} onClick={handleClick} className="block">
           <div className="aspect-square bg-muted/50 relative overflow-hidden">
-            <Image
-              src={getProductImage(product.category, product.id)}
+            <img
+              src={getProductImageSrc(product.image_url, product.category, product.id, product.name)}
               alt={product.name}
-              fill
-              unoptimized
-              className="object-cover group-hover:scale-110 transition-transform duration-500 ease-out"
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+              className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 ease-out"
+              loading="lazy"
+              onError={(e) => {
+                e.currentTarget.src = getProductImagePlaceholder(product.name);
+              }}
             />
             {badgeConfig && (
               <span

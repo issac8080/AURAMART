@@ -139,7 +139,7 @@ export default function CheckoutPage() {
         console.error("Failed to clear cart:", e);
       }
       
-      router.push(`/orders/${order.id}`);
+      router.push(`/orders/${order.id}?spin=1`);
     } catch (err) {
       alert("Failed to place order. Please try again.");
     } finally {
