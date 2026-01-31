@@ -78,28 +78,30 @@ export function Header() {
                 </Link>
               );
             })}
-            {user ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => logout()}
-                className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-              >
-                <LogOut className="h-4 w-4" />
-                Logout
-              </Button>
-            ) : (
-              <Link href="/login">
-                <motion.span
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold bg-gradient-to-r from-indigo-500/15 to-purple-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-400/20 hover:from-indigo-500/25 hover:to-purple-500/25"
+            <span key={user ? "in" : "out"}>
+              {user ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => logout()}
+                  className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
                 >
-                  <LogIn className="h-4 w-4" />
-                  Login
-                </motion.span>
-              </Link>
-            )}
+                  <LogOut className="h-4 w-4" />
+                  Logout
+                </Button>
+              ) : (
+                <Link href="/login">
+                  <motion.span
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold bg-gradient-to-r from-indigo-500/15 to-purple-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-400/20 hover:from-indigo-500/25 hover:to-purple-500/25"
+                  >
+                    <LogIn className="h-4 w-4" />
+                    Login
+                  </motion.span>
+                </Link>
+              )}
+            </span>
           </nav>
 
           {/* Right actions */}
@@ -204,6 +206,7 @@ export function Header() {
               })}
               {user ? (
                 <motion.div
+                  key="logout"
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: navLinks.length * 0.05, duration: 0.2 }}
@@ -221,6 +224,7 @@ export function Header() {
                 </motion.div>
               ) : (
                 <motion.div
+                  key="login"
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: navLinks.length * 0.05, duration: 0.2 }}

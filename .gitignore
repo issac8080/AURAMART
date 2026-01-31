@@ -4,6 +4,7 @@ backend/then/
 backend/__pycache__/
 backend/**/__pycache__/
 backend/.env
+backend/data/carts.json
 backend/*.pyc
 backend/*.pyo
 backend/*.pyd

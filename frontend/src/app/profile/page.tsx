@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -44,6 +45,7 @@ type Profile = {
 };
 
 export default function ProfilePage() {
+  const router = useRouter();
   const { sessionId } = useCart();
   const { user: authUser } = useAuth();
   const userId = sessionId;
@@ -54,6 +56,13 @@ export default function ProfilePage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!authUser) {
+      router.replace("/login?next=/profile");
+      return;
+    }
+  }, [authUser, router]);
 
   useEffect(() => {
     if (authUser) {
@@ -90,7 +99,7 @@ export default function ProfilePage() {
         setOrders(data.orders || []);
       } catch {}
     }
-    if (userId) {
+    if (userId && authUser) {
       Promise.all([loadProfile(), loadOrders()]).finally(() => setLoading(false));
     } else {
       setLoading(false);
@@ -121,6 +130,16 @@ export default function ProfilePage() {
   };
 
   const completedCount = orders.filter((o) => o.status === "delivered" || o.status === "picked_up").length;
+
+  // Never show profile content without login: middleware + client guard
+  if (!authUser) {
+    return (
+      <div className="py-12 text-center">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto" />
+        <p className="mt-4 text-muted-foreground">Redirecting to login...</p>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

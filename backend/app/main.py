@@ -3,10 +3,10 @@ AuraShop Backend - AI Shopping Assistant API
 REST + event tracking + recommendations + chat
 """
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from app.config import CORS_ORIGINS
+from app.config import CORS_ORIGINS, RAZORPAY_KEY_ID
 from app.models import (
     EventPayload,
     ChatRequest,
@@ -26,6 +26,7 @@ from app.data_store import (
     get_events,
     get_cart,
     add_to_cart,
+    set_cart_quantity,
     remove_from_cart,
     clear_cart,
     get_session_context,
@@ -65,6 +66,12 @@ from app.wallet_service import (
     is_spin_used,
     add_spin_reward,
 )
+from app.payment_service import (
+    create_payment_order,
+    verify_payment_signature,
+    get_payment_details,
+    RAZORPAY_AVAILABLE,
+)
 from app.discountBackend import (
     get_applicable_discounts,
     get_new_user_discount,
@@ -79,6 +86,12 @@ from app.discountBackend import (
     AppliedDiscount,
     PriceDropNotification,
 )
+
+# Track payment_ids already credited (Razorpay verify) to avoid double-credit
+_verified_payment_ids = set()
+
+# Pending checkout: razorpay_order_id -> CreateOrderRequest (for confirm after payment)
+_pending_checkout_orders: dict = {}
 
 
 @asynccontextmanager
@@ -218,13 +231,15 @@ def auth_send_otp_endpoint(body: SendOtpRequest):
 @app.post("/auth/verify-otp")
 def auth_verify_otp_endpoint(body: VerifyOtpRequest):
     """Verify OTP and return success. Frontend can then log the user in (email only)."""
-    ok = auth_verify_otp(body.email, body.otp)
+    email = (body.email or "").strip().lower()
+    otp = str(body.otp) if body.otp is not None else ""
+    ok = auth_verify_otp(email, otp)
     if not ok:
         raise HTTPException(status_code=400, detail="Invalid or expired OTP")
-    name = body.email.split("@")[0].replace(".", " ").replace("_", " ")
+    name = email.split("@")[0].replace(".", " ").replace("_", " ")
     if name:
         name = name[0].upper() + name[1:]
-    return {"success": True, "email": body.email.strip().lower(), "name": name or "User"}
+    return {"success": True, "email": email, "name": name or "User"}
 
 
 @app.post("/home/coupon-game")
@@ -269,12 +284,33 @@ def session_context(session_id: str):
 
 @app.get("/session/{session_id}/cart")
 def get_session_cart(session_id: str):
-    cart_ids = get_cart(session_id)
+    items = get_cart(session_id)
     products = []
-    for pid in cart_ids:
-        p = get_product(pid)
+    for item in items:
+        p = get_product(item["product_id"])
         if p:
-            products.append(p.model_dump())
+            products.append({**p.model_dump(), "quantity": item["quantity"]})
+    return {"cart": products}
+
+
+@app.patch("/session/{session_id}/cart/item")
+def update_cart_item(session_id: str, body: dict):
+    """Set quantity for a product. quantity <= 0 removes the item."""
+    product_id = body.get("product_id")
+    quantity = body.get("quantity")
+    if not product_id:
+        raise HTTPException(status_code=400, detail="product_id required")
+    try:
+        q = int(quantity) if quantity is not None else 1
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="quantity must be an integer")
+    set_cart_quantity(session_id, product_id, q)
+    items = get_cart(session_id)
+    products = []
+    for i in items:
+        p = get_product(i["product_id"])
+        if p:
+            products.append({**p.model_dump(), "quantity": i["quantity"]})
     return {"cart": products}
 
 
@@ -296,7 +332,7 @@ def list_stores():
 
 @app.post("/orders")
 def create_new_order(body: CreateOrderRequest):
-    """Create a new order (home delivery or store pickup)."""
+    """Create a new order (home delivery or store pickup). Used when Razorpay is not configured."""
     order = create_order(
         user_id=body.user_id,
         items=body.items,
@@ -305,6 +341,73 @@ def create_new_order(body: CreateOrderRequest):
         store_location=body.store_location,
     )
     return order.model_dump()
+
+
+def _require_logged_in_checkout(x_logged_in: str | None = Header(None, alias="X-Logged-In")):
+    if x_logged_in != "true":
+        raise HTTPException(status_code=401, detail="Login required")
+
+
+class CheckoutCreatePaymentRequest(CreateOrderRequest):
+    """CreateOrderRequest + optional discounted total for Razorpay amount."""
+    order_total: float | None = None  # If set, use for Razorpay amount (after discounts)
+
+
+@app.post("/checkout/create-payment")
+def checkout_create_payment(
+    body: CheckoutCreatePaymentRequest,
+    x_logged_in: str | None = Header(None, alias="X-Logged-In"),
+):
+    """Create Razorpay order for checkout total. Returns razorpay_order_id for frontend to open Razorpay."""
+    _require_logged_in_checkout(x_logged_in)
+    if not RAZORPAY_AVAILABLE or not RAZORPAY_KEY_ID:
+        raise HTTPException(status_code=503, detail="Razorpay not configured")
+    total = body.order_total if body.order_total is not None and body.order_total > 0 else sum(item.price * item.quantity for item in body.items)
+    if total <= 0:
+        raise HTTPException(status_code=400, detail="Invalid order total")
+    import time
+    receipt = f"ord{int(time.time() * 1000)}"[:40]
+    try:
+        order = create_payment_order(amount=total, currency="INR", receipt=receipt, notes={"session_id": body.session_id})
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    razorpay_order_id = order["id"]
+    _pending_checkout_orders[razorpay_order_id] = body.model_dump()
+    return {
+        "razorpay_order_id": razorpay_order_id,
+        "amount": int(order["amount"]),
+        "currency": order["currency"],
+        "key_id": RAZORPAY_KEY_ID,
+    }
+
+
+@app.post("/checkout/confirm-payment")
+def checkout_confirm_payment(
+    body: dict,
+    x_logged_in: str | None = Header(None, alias="X-Logged-In"),
+):
+    """Verify Razorpay payment and create order. Call after successful Razorpay checkout."""
+    _require_logged_in_checkout(x_logged_in)
+    razorpay_order_id = body.get("razorpay_order_id")
+    payment_id = body.get("payment_id")
+    signature = body.get("signature")
+    if not razorpay_order_id or not payment_id or not signature:
+        raise HTTPException(status_code=400, detail="razorpay_order_id, payment_id, signature required")
+    if not verify_payment_signature(razorpay_order_id, payment_id, signature):
+        raise HTTPException(status_code=400, detail="Invalid payment signature")
+    pending = _pending_checkout_orders.pop(razorpay_order_id, None)
+    if not pending:
+        raise HTTPException(status_code=400, detail="Order session expired. Please checkout again.")
+    from app.models import CreateOrderRequest
+    req = CreateOrderRequest(**pending)
+    order = create_order(
+        user_id=req.user_id,
+        items=req.items,
+        delivery_method=req.delivery_method,
+        delivery_address=req.delivery_address,
+        store_location=req.store_location,
+    )
+    return {"order_id": order.id}
 
 
 @app.get("/orders/{order_id}")
@@ -492,16 +595,99 @@ def preview_cashback(order_total: float):
     }
 
 
-@app.post("/wallet/add-money")
-def add_money_endpoint(user_id: str = Query(...), amount: float = Query(...), payment_method: str = Query("razorpay")):
-    """Add money to wallet (top-up). Payment gateway integration placeholder."""
+def _require_logged_in(x_logged_in: str | None = Header(None, alias="X-Logged-In")):
+    """Require X-Logged-In: true header for payment/wallet endpoints."""
+    if x_logged_in != "true":
+        raise HTTPException(status_code=401, detail="Login required")
+
+
+@app.get("/wallet/razorpay-key")
+def get_razorpay_key(x_logged_in: str | None = Header(None, alias="X-Logged-In")):
+    """Return Razorpay key ID for frontend checkout (public key). Requires login."""
+    _require_logged_in(x_logged_in)
+    if not RAZORPAY_KEY_ID:
+        raise HTTPException(status_code=503, detail="Razorpay not configured")
+    return {"key_id": RAZORPAY_KEY_ID}
+
+
+@app.post("/wallet/create-order")
+def create_wallet_order(
+    user_id: str = Query(...),
+    amount: float = Query(...),
+    x_logged_in: str | None = Header(None, alias="X-Logged-In"),
+):
+    """Create a Razorpay order for wallet top-up. Frontend uses order_id to open checkout. Requires login."""
+    _require_logged_in(x_logged_in)
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be positive")
     if amount > 100000:
         raise HTTPException(status_code=400, detail="Maximum top-up amount is ₹100,000")
-    
-    # In production, integrate with Razorpay here
-    # For now, simulate successful payment
+    if not RAZORPAY_AVAILABLE or not RAZORPAY_KEY_ID:
+        raise HTTPException(status_code=503, detail="Razorpay not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env")
+    try:
+        import time
+        # Razorpay receipt max 40 chars; keep unique and short
+        receipt = f"w{int(time.time() * 1000)}"[:40]
+        order = create_payment_order(
+            amount=amount,
+            currency="INR",
+            receipt=receipt,
+            notes={"user_id": user_id, "amount_inr": str(amount)},
+        )
+        return {
+            "order_id": order["id"],
+            "amount": int(order["amount"]),
+            "currency": order["currency"],
+            "key_id": RAZORPAY_KEY_ID,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/wallet/verify-payment")
+def verify_wallet_payment(
+    user_id: str = Query(...),
+    order_id: str = Query(...),
+    payment_id: str = Query(...),
+    signature: str = Query(...),
+):
+    """Verify Razorpay payment and credit wallet. Call after successful checkout."""
+    if not verify_payment_signature(order_id, payment_id, signature):
+        raise HTTPException(status_code=400, detail="Invalid payment signature")
+    if payment_id in _verified_payment_ids:
+        return {"success": True, "message": "Payment already credited"}
+    try:
+        payment = get_payment_details(payment_id)
+        amount_paise = payment.get("amount") or 0
+        amount_inr = round(amount_paise / 100, 2)
+        if amount_inr <= 0:
+            raise HTTPException(status_code=400, detail="Invalid payment amount")
+        transaction = add_money_to_wallet(user_id, amount_inr, "razorpay")
+        _verified_payment_ids.add(payment_id)
+        return {
+            "success": True,
+            "transaction": transaction.model_dump(),
+            "message": f"Successfully added ₹{amount_inr} to wallet",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/wallet/add-money")
+def add_money_endpoint(
+    user_id: str = Query(...),
+    amount: float = Query(...),
+    payment_method: str = Query("razorpay"),
+    x_logged_in: str | None = Header(None, alias="X-Logged-In"),
+):
+    """Add money to wallet (top-up). Used when Razorpay is not configured (instant demo) or as fallback. Requires login."""
+    _require_logged_in(x_logged_in)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive")
+    if amount > 100000:
+        raise HTTPException(status_code=400, detail="Maximum top-up amount is ₹100,000")
     transaction = add_money_to_wallet(user_id, amount, payment_method)
     return {
         "success": True,

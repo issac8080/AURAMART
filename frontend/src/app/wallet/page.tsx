@@ -1,16 +1,36 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import Script from "next/script";
 import { motion } from "framer-motion";
 import { Wallet as WalletIcon, TrendingUp, TrendingDown, Clock, Gift, ArrowLeft, Sparkles, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useCart } from "@/app/providers";
+import { useCart, useAuth } from "@/app/providers";
 import { formatPrice } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 
 const API = "/api";
+
+/** Headers sent with wallet/payment requests so backend can require login. */
+function authHeaders(): HeadersInit {
+  return { "X-Logged-In": "true" };
+}
+
+declare global {
+  interface Window {
+    Razorpay: new (options: {
+      key: string;
+      amount: number;
+      order_id: string;
+      name?: string;
+      description?: string;
+      handler: (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => void;
+    }) => { open: () => void };
+  }
+}
 
 type Transaction = {
   id: string;
@@ -41,7 +61,9 @@ type Summary = {
 };
 
 export default function WalletPage() {
+  const router = useRouter();
   const { sessionId } = useCart();
+  const { user } = useAuth();
   const userId = sessionId;
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -50,6 +72,13 @@ export default function WalletPage() {
   const [showAddMoney, setShowAddMoney] = useState(false);
   const [addAmount, setAddAmount] = useState("");
   const [adding, setAdding] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      router.replace("/login?next=/wallet");
+      return;
+    }
+  }, [user, router]);
 
   useEffect(() => {
     async function loadWallet() {
@@ -92,6 +121,123 @@ export default function WalletPage() {
     return type === "credit" ? "text-emerald-600" : "text-red-600";
   };
 
+  const refreshWallet = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const walletRes = await fetch(`${API}/users/${userId}/wallet`);
+      if (walletRes.ok) {
+        const data = await walletRes.json();
+        setWallet(data.wallet);
+        setSummary(data.summary);
+      }
+      const txnRes = await fetch(`${API}/users/${userId}/wallet/transactions?limit=20`);
+      if (txnRes.ok) {
+        const txnData = await txnRes.json();
+        setTransactions(txnData.transactions || []);
+      }
+    } catch {}
+  }, [userId]);
+
+  const handleAddMoney = async () => {
+    if (!user) {
+      router.replace("/login?next=/wallet");
+      return;
+    }
+    const amountNum = parseFloat(addAmount);
+    if (isNaN(amountNum) || amountNum < 1 || amountNum > 100000) return;
+    setAdding(true);
+    try {
+      const keyRes = await fetch(`${API}/wallet/razorpay-key`, { headers: authHeaders() });
+      const razorpayConfigured = keyRes.ok;
+      const keyData = keyRes.ok ? await keyRes.json() : null;
+
+      if (!razorpayConfigured || !keyData?.key_id) {
+        // Fallback: instant add when Razorpay not configured
+        const res = await fetch(
+          `${API}/wallet/add-money?user_id=${encodeURIComponent(userId || "")}&amount=${amountNum}&payment_method=razorpay`,
+          { method: "POST", headers: authHeaders() }
+        );
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert(err.detail || "Failed to add money");
+          return;
+        }
+        setAddAmount("");
+        setShowAddMoney(false);
+        await refreshWallet();
+        return;
+      }
+
+      const orderRes = await fetch(
+        `${API}/wallet/create-order?user_id=${encodeURIComponent(userId || "")}&amount=${amountNum}`,
+        { method: "POST", headers: authHeaders() }
+      );
+      if (!orderRes.ok) {
+        const err = await orderRes.json().catch(() => ({}));
+        alert(err.detail || "Failed to create order");
+        return;
+      }
+      const order = await orderRes.json();
+      const { order_id, amount: amountPaise, key_id } = order;
+
+      if (typeof window.Razorpay === "undefined") {
+        alert("Payment gateway is loading. Please try again in a moment.");
+        return;
+      }
+
+      const rzp = new window.Razorpay({
+        key: key_id,
+        amount: amountPaise,
+        order_id,
+        name: "Aura Wallet",
+        description: `Add ₹${amountNum} to wallet`,
+        handler: async (response) => {
+          setAdding(true);
+          try {
+            const verifyRes = await fetch(
+              `${API}/wallet/verify-payment?` +
+                new URLSearchParams({
+                  user_id: userId || "",
+                  order_id: response.razorpay_order_id,
+                  payment_id: response.razorpay_payment_id,
+                  signature: response.razorpay_signature,
+                }),
+              { method: "POST", headers: authHeaders() }
+            );
+            if (!verifyRes.ok) {
+              const err = await verifyRes.json().catch(() => ({}));
+              alert(err.detail || "Payment verification failed");
+              return;
+            }
+            setAddAmount("");
+            setShowAddMoney(false);
+            await refreshWallet();
+          } catch {
+            alert("Failed to credit wallet. Contact support with your payment ID.");
+          } finally {
+            setAdding(false);
+          }
+        },
+      });
+      rzp.open();
+      setAdding(false);
+    } catch {
+      alert("Failed to add money. Please try again.");
+      setAdding(false);
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  if (!user) {
+    return (
+      <div className="py-12 text-center">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto" />
+        <p className="mt-4 text-muted-foreground">Redirecting to login...</p>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="py-12 text-center">
@@ -102,6 +248,8 @@ export default function WalletPage() {
   }
 
   return (
+    <>
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
     <div className="py-8 space-y-6">
       <div className="flex items-center gap-3">
         <Link href="/profile">
@@ -346,14 +494,19 @@ export default function WalletPage() {
               <div>
                 <label className="text-sm font-medium">Amount (₹)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="Enter amount"
                   value={addAmount}
-                  onChange={(e) => setAddAmount(e.target.value)}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/[^\d.]/g, "");
+                    const parts = raw.split(".");
+                    const v = parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : raw;
+                    setAddAmount(v);
+                  }}
                   className="w-full mt-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                   disabled={adding}
-                  min="1"
-                  max="100000"
+                  autoComplete="off"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
                   Min: ₹1 | Max: ₹100,000
@@ -362,10 +515,10 @@ export default function WalletPage() {
 
               <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
                 <p className="text-sm text-blue-700 dark:text-blue-400">
-                  💳 Payment via Razorpay (Integration pending)
+                  💳 Pay securely via Razorpay
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  For demo purposes, money will be added instantly
+                  Card, UPI, Net Banking. If Razorpay is not configured, amount is added instantly for demo.
                 </p>
               </div>
 
@@ -391,5 +544,6 @@ export default function WalletPage() {
         </div>
       )}
     </div>
+    </>
   );
 }
