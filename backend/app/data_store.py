@@ -10,6 +10,7 @@ from app.models import EventPayload, Product, EventType
 
 # Load synthetic products once
 PRODUCTS_PATH = Path(__file__).resolve().parent.parent / "data" / "products.json"
+CARTS_PATH = Path(__file__).resolve().parent.parent / "data" / "carts.json"
 _products: List[Product] = []
 _products_by_id: Dict[str, Product] = {}
 
@@ -19,8 +20,36 @@ _events: Dict[str, List[dict]] = {}
 # User preference profiles (derived from events): session_id -> profile
 _profiles: Dict[str, dict] = {}
 
-# Cart per session: session_id -> list of product_ids
-_carts: Dict[str, List[str]] = {}
+# Cart per session: session_id -> list of {product_id, quantity} (persisted to disk)
+_carts: Dict[str, List[dict]] = {}
+_carts_loaded = False
+
+
+def _load_carts() -> None:
+    """Load carts from disk so they survive server restarts."""
+    global _carts, _carts_loaded
+    if _carts_loaded:
+        return
+    _carts_loaded = True
+    if not CARTS_PATH.exists():
+        return
+    try:
+        with open(CARTS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            _carts = {k: v if isinstance(v, list) else [] for k, v in data.items()}
+    except Exception:
+        pass
+
+
+def _save_carts() -> None:
+    """Persist carts to disk."""
+    try:
+        CARTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(CARTS_PATH, "w", encoding="utf-8") as f:
+            json.dump(_carts, f, indent=2)
+    except Exception:
+        pass
 
 # Recommendation cache: (session_id, context_hash) -> list of recs (optional TTL)
 _rec_cache: Dict[str, List[dict]] = {}
@@ -31,11 +60,25 @@ def load_products() -> List[Product]:
     global _products, _products_by_id
     if _products:
         return _products
-    with open(PRODUCTS_PATH, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    _products = [Product(**p) for p in data]
-    _products_by_id = {p.id: p for p in _products}
-    return _products
+    try:
+        if not PRODUCTS_PATH.exists():
+            return _products
+        with open(PRODUCTS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, list):
+            data = []
+        _products = []
+        for p in data:
+            try:
+                _products.append(Product(**p))
+            except Exception:
+                continue
+        _products_by_id = {p.id: p for p in _products}
+        return _products
+    except Exception:
+        _products = []
+        _products_by_id = {}
+        return _products
 
 
 def get_product(product_id: str) -> Optional[Product]:
@@ -88,26 +131,74 @@ def get_events(session_id: str, limit: int = 100) -> List[dict]:
     return list(reversed(_events.get(session_id, [])[:limit]))
 
 
-def get_cart(session_id: str) -> List[str]:
-    return list(_carts.get(session_id, []))
+def _normalize_cart(items: List) -> List[dict]:
+    """Convert legacy list of ids or list of {product_id, quantity} to list of dicts."""
+    out: List[dict] = []
+    for x in items:
+        if isinstance(x, str):
+            out.append({"product_id": x, "quantity": 1})
+        elif isinstance(x, dict) and "product_id" in x:
+            q = max(1, int(x.get("quantity", 1)))
+            out.append({"product_id": str(x["product_id"]), "quantity": q})
+    return out
 
 
-def add_to_cart(session_id: str, product_id: str) -> None:
+def get_cart(session_id: str) -> List[dict]:
+    """Return list of {product_id, quantity}."""
+    _load_carts()
+    raw = _carts.get(session_id, [])
+    return _normalize_cart(raw)
+
+
+def add_to_cart(session_id: str, product_id: str, quantity: int = 1) -> None:
+    _load_carts()
     if session_id not in _carts:
         _carts[session_id] = []
-    if product_id not in _carts[session_id]:
-        _carts[session_id].append(product_id)
+    items = _normalize_cart(_carts[session_id])
+    found = False
+    for item in items:
+        if item["product_id"] == product_id:
+            item["quantity"] = item["quantity"] + max(1, quantity)
+            found = True
+            break
+    if not found:
+        items.append({"product_id": product_id, "quantity": max(1, quantity)})
+    _carts[session_id] = items
+    _save_carts()
+
+
+def set_cart_quantity(session_id: str, product_id: str, quantity: int) -> None:
+    """Set quantity for a product. If quantity <= 0, remove the item."""
+    _load_carts()
+    if session_id not in _carts:
+        return
+    items = _normalize_cart(_carts[session_id])
+    if quantity <= 0:
+        _carts[session_id] = [x for x in items if x["product_id"] != product_id]
+        _save_carts()
+        return
+    found = False
+    for item in items:
+        if item["product_id"] == product_id:
+            item["quantity"] = quantity
+            found = True
+            break
+    if not found:
+        items.append({"product_id": product_id, "quantity": quantity})
+    _carts[session_id] = items
+    _save_carts()
 
 
 def remove_from_cart(session_id: str, product_id: str) -> None:
-    if session_id in _carts and product_id in _carts[session_id]:
-        _carts[session_id].remove(product_id)
+    set_cart_quantity(session_id, product_id, 0)
 
 
 def clear_cart(session_id: str) -> None:
     """Clear all items from cart."""
+    _load_carts()
     if session_id in _carts:
         _carts[session_id] = []
+        _save_carts()
 
 
 def set_profile(session_id: str, profile: dict) -> None:
@@ -121,7 +212,8 @@ def get_profile(session_id: str) -> dict:
 def get_session_context(session_id: str) -> dict:
     """Build context for AI: events, cart, profile, viewed product IDs."""
     events = get_events(session_id, 80)
-    cart_ids = get_cart(session_id)
+    cart_items = get_cart(session_id)
+    cart_ids = [item["product_id"] for item in cart_items]
     profile = get_profile(session_id)
     viewed_ids = [
         e.get("product_id") for e in events

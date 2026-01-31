@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
-import { Syne, DM_Sans } from "next/font/google";
+import { Outfit, Nunito } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/Header";
 import { ChatWidget } from "@/components/ChatWidget";
 import { BackendOfflineBanner } from "@/components/BackendOfflineBanner";
 import { Providers } from "./providers";
 
-const syne = Syne({
+const outfit = Outfit({
   subsets: ["latin"],
   variable: "--font-heading",
   display: "swap",
 });
 
-const dmSans = DM_Sans({
+const nunito = Nunito({
   subsets: ["latin"],
   variable: "--font-body",
   display: "swap",
@@ -29,7 +29,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${syne.variable} ${dmSans.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${outfit.variable} ${nunito.variable}`}>
       <body className="min-h-screen antialiased font-sans text-foreground">
         <Providers>
           <BackendOfflineBanner />

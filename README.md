@@ -67,6 +67,7 @@ python -m venv .venv
 # source .venv/bin/activate
 
 pip install -r requirements.txt
+# requirements.txt includes chromadb + numpy for RAG (semantic product search + FAQ). Optional: works without them using keyword-only recommend and fallback FAQ.
 copy .env.example .env   # Windows
 # cp .env.example .env   # macOS/Linux
 # Edit .env and set: OPENAI_API_KEY=sk-your-openai-key

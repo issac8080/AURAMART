@@ -122,9 +122,10 @@ def get_order(order_id: str) -> Optional[Order]:
 
 
 def get_user_orders(user_id: str) -> List[Order]:
-    """Get all orders for a user."""
+    """Get all orders for a user, newest first."""
     _load_orders()
-    return [o for o in _orders.values() if o.user_id == user_id]
+    user_orders = [o for o in _orders.values() if o.user_id == user_id]
+    return sorted(user_orders, key=lambda o: o.created_at or "", reverse=True)
 
 
 def update_order_status(order_id: str, status: OrderStatus) -> Optional[Order]:

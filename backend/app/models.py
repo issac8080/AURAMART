@@ -159,3 +159,16 @@ class AddMoneyRequest(BaseModel):
     user_id: str
     amount: float
     payment_method: str = "razorpay"
+
+
+class SpinRequest(BaseModel):
+    session_id: str
+
+
+class SendOtpRequest(BaseModel):
+    email: str
+
+
+class VerifyOtpRequest(BaseModel):
+    email: str
+    otp: str
