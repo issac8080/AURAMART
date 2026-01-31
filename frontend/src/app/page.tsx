@@ -387,7 +387,7 @@ export default function HomePage() {
         </div>
       </motion.section>
 
-      {/* Recommended for you */}
+      {/* Recommended for you – highlighted section */}
       {loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {[...Array(8)].map((_, i) => (
@@ -396,16 +396,57 @@ export default function HomePage() {
         </div>
       ) : (
         <>
-          <div id="recommended-picks" className="scroll-mt-6">
-            <ProductCarousel
-              title="✨ Recommended for You"
-              products={recommended}
-              badges={recBadges}
-              sessionId={sessionId}
-              onAddToCart={handleAddToCart}
-              onProductClick={handleProductClick}
-            />
-          </div>
+          <motion.section
+            id="recommended-picks"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="scroll-mt-6 relative overflow-hidden rounded-2xl sm:rounded-3xl border-2 border-indigo-200 dark:border-indigo-500/50 bg-gradient-to-br from-indigo-50/80 via-white to-purple-50/60 dark:from-indigo-950/40 dark:via-gray-900 dark:to-purple-950/30 p-6 sm:p-8 shadow-xl shadow-indigo-500/10 dark:shadow-indigo-500/5"
+          >
+            {/* Decorative gradient orbs */}
+            <div className="absolute top-0 right-0 w-72 h-72 bg-indigo-400/20 dark:bg-indigo-500/15 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-400/15 dark:bg-purple-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(99,102,241,0.12),transparent)] dark:bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(99,102,241,0.15),transparent)] pointer-events-none" />
+
+            <div className="relative">
+              {/* Section header */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <motion.div
+                    className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 ring-2 ring-white/30 dark:ring-indigo-400/20"
+                    whileHover={{ scale: 1.05, rotate: 5 }}
+                    transition={{ type: "spring", stiffness: 400 }}
+                  >
+                    <Sparkles className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+                  </motion.div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="font-heading text-xl sm:text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
+                        Recommended for You
+                      </h2>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-indigo-500/15 dark:bg-indigo-400/20 text-indigo-700 dark:text-indigo-300 px-2.5 py-0.5 text-xs font-semibold border border-indigo-300/50 dark:border-indigo-500/30">
+                        AI Picked
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                      Personalized picks based on your taste and browsing
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Carousel – no duplicate title; scroll buttons shown by ProductCarousel */}
+              <ProductCarousel
+                title=""
+                hideTitle
+                products={recommended}
+                badges={recBadges}
+                sessionId={sessionId}
+                onAddToCart={handleAddToCart}
+                onProductClick={handleProductClick}
+              />
+            </div>
+          </motion.section>
 
           {/* Games – Play & Win: Spin Wheel, Jackpot, Lucky Scratch */}
           <motion.section

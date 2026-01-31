@@ -13,6 +13,7 @@ export function ProductCarousel({
   sessionId,
   onAddToCart,
   onProductClick,
+  hideTitle = false,
 }: {
   title: string;
   products: Product[];
@@ -20,6 +21,7 @@ export function ProductCarousel({
   sessionId?: string;
   onAddToCart?: (productId: string) => void;
   onProductClick?: (productId: string) => void;
+  hideTitle?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -33,10 +35,12 @@ export function ProductCarousel({
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
-        <h2 className="font-heading text-lg sm:text-xl font-bold tracking-tight text-foreground">
-          {title}
-        </h2>
+      <div className={`flex items-center gap-4 ${hideTitle ? "justify-end" : "justify-between"}`}>
+        {!hideTitle && (
+          <h2 className="font-heading text-lg sm:text-xl font-bold tracking-tight text-foreground">
+            {title}
+          </h2>
+        )}
         <div className="flex gap-2 shrink-0">
           <Button variant="outline" size="icon" className="h-10 w-10 rounded-2xl border-border/80 hover:border-primary/30 hover:shadow-glow transition-all" onClick={() => scroll("left")} aria-label="Scroll left">
             <ChevronLeft className="h-4 w-4" />
