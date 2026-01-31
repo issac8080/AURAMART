@@ -23,6 +23,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ProductCarousel } from "@/components/ProductCarousel";
+import { FestivalBanner } from "@/discountFrontend/FestivalBanner";
 import { HomeSpinWheel } from "@/components/HomeSpinWheel";
 import { HomeJackpot } from "@/components/HomeJackpot";
 import { HomeScratch } from "@/components/HomeScratch";
@@ -369,6 +370,8 @@ export default function HomePage() {
           </motion.div>
         </div>
       </motion.section>
+
+      <FestivalBanner />
 
       {/* Shop by category – many options */}
       <motion.section
